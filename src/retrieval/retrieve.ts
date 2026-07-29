@@ -47,11 +47,7 @@ async function vectorSearch(
  * non-matching word returns nothing — acceptable, since an empty keyword leg
  * just leaves fusion with the vector ordering.
  */
-async function keywordSearch(
-  tenantId: string,
-  query: string,
-  limit: number,
-): Promise<Candidate[]> {
+async function keywordSearch(tenantId: string, query: string, limit: number): Promise<Candidate[]> {
   const tsquery = sql`websearch_to_tsquery('english', ${query})`;
   return db
     .select(candidateColumns)

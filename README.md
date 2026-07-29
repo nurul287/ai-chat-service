@@ -67,17 +67,17 @@ Full guides live in [`docs/`](docs/); runnable examples in
 
 ## Scripts
 
-| Script            | Purpose                                        |
-| ----------------- | ---------------------------------------------- |
-| `pnpm dev`        | Watch-mode server on `PORT` (default 4000)     |
-| `pnpm build`      | `tsc` to `dist/` (excludes test files)         |
-| `pnpm typecheck`  | `tsc --noEmit`, including test files           |
-| `pnpm test`       | Vitest against real local Postgres             |
-| `pnpm lint`       | ESLint (flat config, type-aware)               |
-| `pnpm format`     | Prettier write                                 |
-| `pnpm db:start`   | Start local Supabase                           |
-| `pnpm db:reset`   | Re-apply all migrations (destructive)          |
-| `pnpm create-tenant "<name>" <slug>` | Create a tenant, print its key |
+| Script                               | Purpose                                    |
+| ------------------------------------ | ------------------------------------------ |
+| `pnpm dev`                           | Watch-mode server on `PORT` (default 4000) |
+| `pnpm build`                         | `tsc` to `dist/` (excludes test files)     |
+| `pnpm typecheck`                     | `tsc --noEmit`, including test files       |
+| `pnpm test`                          | Vitest against real local Postgres         |
+| `pnpm lint`                          | ESLint (flat config, type-aware)           |
+| `pnpm format`                        | Prettier write                             |
+| `pnpm db:start`                      | Start local Supabase                       |
+| `pnpm db:reset`                      | Re-apply all migrations (destructive)      |
+| `pnpm create-tenant "<name>" <slug>` | Create a tenant, print its key             |
 
 ## Tenant isolation
 

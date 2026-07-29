@@ -114,7 +114,9 @@ const documentsRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const deleted = await deleteDocument(request.tenant!.id, request.params.externalId);
       if (!deleted) {
-        return reply.code(404).send({ error: { code: "not_found", message: "Document not found" } });
+        return reply
+          .code(404)
+          .send({ error: { code: "not_found", message: "Document not found" } });
       }
       return reply.code(200).send({ data: { deleted: true } });
     },

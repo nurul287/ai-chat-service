@@ -198,7 +198,14 @@ existing project. Point it at this GitHub repo and set these service variables:
 | `NODE_ENV`       | `production`                              |
 | `PUBLIC_URL`     | The Railway public domain, once generated |
 
-Do **not** set `PORT` — Railway injects it, and the service reads it.
+Leave `PORT` unset initially — Railway injects a port dynamically and the
+service reads it, which is correct for a fresh domain that auto-tracks the
+port the app actually binds. **If the healthcheck fails with `502 Application
+failed to respond` despite deploy logs showing a clean boot**, the domain has
+a fixed `targetPort` (check with `railway domain list`) that isn't tracking
+the dynamic assignment — set `PORT` explicitly to that same value (this
+repo's default is `4000`) so the app always binds where the domain expects.
+This was the actual fix needed the first time this repo was deployed.
 
 `PUBLIC_URL` is chicken-and-egg: the domain does not exist until the first
 deploy. Deploy without it, generate the domain, then set it and redeploy. Its

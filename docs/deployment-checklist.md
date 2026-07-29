@@ -125,8 +125,20 @@ Railway → your service → **Variables**:
 - [ ] `VOYAGE_API_KEY` — your Voyage key
 - [ ] `NODE_ENV` — `production`
 
-**Do not set `PORT`.** Railway injects it and the service reads it. Setting it
-yourself will bind the wrong port and every healthcheck will fail.
+**Leave `PORT` unset for now.** Railway injects a port dynamically and the
+service reads it — this is correct for a brand-new domain, where Railway's
+networking layer auto-detects and tracks whatever port the app actually binds.
+
+> **Exception — if the healthcheck later fails with `502 Application failed to
+respond` even though deploy logs show a clean boot:** the service's public
+> domain has a **fixed `targetPort`** (visible via `railway domain list`) that
+> is not tracking Railway's dynamic port injection. This happens if the domain
+> was generated before the app's first successful boot, or was otherwise
+> pinned manually. Fix it by setting `PORT` explicitly to whatever the
+> domain's `targetPort` already is (commonly `4000`, this repo's default), so
+> the app always binds to the exact port the domain routes to — rather than
+> chasing a dynamic value each deploy. This one variable was the actual fix the
+> first time this repo was deployed.
 
 **Verify:** deployment logs show single-line JSON, including
 `{"level":30,...,"msg":"database connection ok"}`. If you instead see
@@ -247,18 +259,18 @@ API_KEY=sk_live_... BASE_URL=https://<your-domain> node examples/node/index.js
 
 ## If something is wrong
 
-| Symptom                                                     | Cause                                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `ENOTFOUND`/`ENETUNREACH` on `db.<ref>.supabase.co`         | Direct connection is IPv6-only — use a pooler string (step 2)                                          |
-| `packages field missing or empty` during build              | Build ran pnpm 9; `packageManager` in package.json pins 11                                             |
-| `Refusing to run tests against a non-local database`        | `.env` points at production — restore localhost                                                        |
-| `Invalid configuration — …` at boot                         | A required env var is missing or malformed; the message names which one                                |
-| Crash-loop immediately, `PUBLIC_URL: Invalid URL`           | Fixed as of this doc's version — update to the latest `main` if you still see this                     |
-| Boot exits immediately, `database unreachable`              | Wrong `DATABASE_URL`, or the password was not substituted                                              |
-| Healthcheck fails but logs look fine                        | `PORT` was set manually — remove it                                                                    |
-| Healthcheck fails, logs show `database unreachable at boot` | `DATABASE_URL` wrong/unreachable. The boot ping has a 10s connect timeout, so this appears within ~11s |
-| Healthcheck fails with nothing in the logs                  | Process never reached `listen()` — check the start command and that `dist/` was built                  |
-| `type "vector" does not exist`                              | Migrations were not applied; run `pnpm db:push`                                                        |
-| `prepared statement ... does not exist`                     | Should be handled automatically — file a bug with the URL shape                                        |
-| Search returns `[]` for everything                          | Voyage key invalid or out of quota; check the deploy logs                                              |
-| `401 unauthorized` on a key that worked                     | Its tenant row was truncated by a test run against this DB                                             |
+| Symptom                                                                                                                  | Cause                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ENOTFOUND`/`ENETUNREACH` on `db.<ref>.supabase.co`                                                                      | Direct connection is IPv6-only — use a pooler string (step 2)                                                                                                      |
+| `packages field missing or empty` during build                                                                           | Build ran pnpm 9; `packageManager` in package.json pins 11                                                                                                         |
+| `Refusing to run tests against a non-local database`                                                                     | `.env` points at production — restore localhost                                                                                                                    |
+| `Invalid configuration — …` at boot                                                                                      | A required env var is missing or malformed; the message names which one                                                                                            |
+| Crash-loop immediately, `PUBLIC_URL: Invalid URL`                                                                        | Fixed as of this doc's version — update to the latest `main` if you still see this                                                                                 |
+| Boot exits immediately, `database unreachable`                                                                           | Wrong `DATABASE_URL`, or the password was not substituted                                                                                                          |
+| Healthcheck fails, logs show `database unreachable at boot`                                                              | `DATABASE_URL` wrong/unreachable. The boot ping has a 10s connect timeout, so this appears within ~11s                                                             |
+| Healthcheck fails with nothing in the logs                                                                               | Process never reached `listen()` — check the start command and that `dist/` was built                                                                              |
+| Deploy logs show a clean boot + internal healthcheck 200, but the public URL returns `502 Application failed to respond` | The domain's `targetPort` (`railway domain list`) doesn't match the port the container actually bound to. Set `PORT` explicitly to match the domain's `targetPort` |
+| `type "vector" does not exist`                                                                                           | Migrations were not applied; run `pnpm db:push`                                                                                                                    |
+| `prepared statement ... does not exist`                                                                                  | Should be handled automatically — file a bug with the URL shape                                                                                                    |
+| Search returns `[]` for everything                                                                                       | Voyage key invalid or out of quota; check the deploy logs                                                                                                          |
+| `401 unauthorized` on a key that worked                                                                                  | Its tenant row was truncated by a test run against this DB                                                                                                         |

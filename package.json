@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "db:start": "pnpm dlx supabase@2.98.2 start",
     "db:reset": "pnpm dlx supabase@2.98.2 db reset",
-    "db:status": "pnpm dlx supabase@2.98.2 status"
+    "db:status": "pnpm dlx supabase@2.98.2 status",
+    "create-tenant": "tsx src/scripts/create-tenant.ts"
   },
   "dependencies": {
     "@fastify/swagger": "^9.8.1",

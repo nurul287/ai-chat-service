@@ -23,9 +23,20 @@ function toPublicDocument(doc: Document) {
     title: doc.title,
     content: doc.content,
     metadata: (doc.metadata ?? {}) as Record<string, unknown>,
-    createdAt: doc.createdAt,
-    updatedAt: doc.updatedAt,
+    createdAt: toIso(doc.createdAt),
+    updatedAt: toIso(doc.updatedAt),
   };
+}
+
+/**
+ * Postgres hands timestamptz back as `2026-07-29 09:46:57.946863+00`, which is
+ * not ISO-8601 — V8 parses it, but a strict consumer (Go's time.RFC3339,
+ * Python's fromisoformat before 3.11) does not. Timestamps are part of the
+ * published contract, so they are normalised here rather than leaking the
+ * driver's wire format to every caller.
+ */
+function toIso(timestamp: string): string {
+  return new Date(timestamp).toISOString();
 }
 
 const documentsRoutes: FastifyPluginAsync = async (fastify) => {

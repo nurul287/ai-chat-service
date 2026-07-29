@@ -62,6 +62,16 @@ describe("PUT /v1/documents", () => {
     expect(res.json().data.externalId).toBe("sku-1");
   });
 
+  it("returns ISO-8601 timestamps, not Postgres wire format", async () => {
+    const { key } = await tenantWithKey("acme");
+
+    const res = await put(key, { externalId: "sku-1", content: "x" });
+
+    const { createdAt, updatedAt } = res.json().data;
+    expect(createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  });
+
   it("does not leak tenantId in the response body", async () => {
     const { key } = await tenantWithKey("acme");
 

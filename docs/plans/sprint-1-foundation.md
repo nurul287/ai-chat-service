@@ -3446,3 +3446,78 @@ Recorded here because retrofitting either one after real tenant data exists is m
 
 - **Embedding-model migration.** `vector(1024)` is pinned to `voyage-3`. Changing models later needs a migration plus a full re-embed of every tenant's corpus. A versioned-embeddings story is worth designing before the first paying tenant.
 - **Billing and metering.** Not scoped in any sprint yet. If this is sold rather than self-hosted it needs a sprint of its own; the usage metrics in Sprint 5 are the natural foundation.
+
+---
+
+## Appendix: deviations during execution
+
+Recorded after the fact. The plan above is what was intended; this is what
+actually happened and why.
+
+### Toolchain
+
+- **TypeScript pinned to 5.9, not `latest`.** `pnpm add typescript` resolved to
+  **7.0.2** — the Go-based native compiler. Drizzle's type inference and
+  `drizzle-kit` 0.31 are validated against the 5.x line that Aurevo.BE runs in
+  production, and the whole premise of this plan is porting a proven stack, so
+  matching it beat being first onto a new compiler.
+- **Zod 4, diverging from Aurevo.BE's Zod 3.** Not optional:
+  `fastify-type-provider-zod@7` peer-requires `zod >=4.1.5`.
+- **pnpm 11 moved the build-script allowlist.** The `pnpm` field in
+  `package.json` is silently ignored, and `onlyBuiltDependencies` in
+  `pnpm-workspace.yaml` is superseded by `allowBuilds`. Until this was right,
+  `pnpm test` failed outright on `ERR_PNPM_IGNORED_BUILDS` — pnpm 11 treats an
+  unapproved build script as an error, not a warning.
+
+### Ordering
+
+- `buildApp(opts)`'s logger parameter and `src/lib/logger.ts` were both pulled
+  forward from Task 14, because Task 11's route tests need to silence logging
+  and Task 12's `server.ts` needs the logger config.
+
+### Corrections found while executing
+
+- **`flushApiKeyTouches()` (Task 4).** The planned test asserted `last_used_at`
+  immediately after `verifyApiKey`, racing the deliberate fire-and-forget write
+  — postgres.js can run the update and the following read on different pooled
+  connections. Production stays fire-and-forget; the test awaits a tracked
+  promise instead.
+- **`setErrorHandler` needs an explicit `FastifyError` annotation (Task 11).**
+  Without it Fastify's overload resolution infers the error as `unknown` and
+  every property access fails to typecheck, despite correct runtime behaviour.
+- **Timestamps were not ISO-8601 (Task 12).** The Global Constraints call for
+  ISO strings, but `mode: "string"` returns Postgres' own wire format
+  (`2026-07-29 09:46:57.946863+00`). V8 parses it; Go's `time.RFC3339` and
+  Python's `fromisoformat` do not. Normalised at the API boundary, with a test.
+  Found only by looking at a real response body — no mocked test would have
+  caught it.
+- **The "cannot ship undocumented" test did not work as specified (Task 16).**
+  The plan's check was that every registered `/v1` path appears in the spec, but
+  `@fastify/swagger` auto-includes a schema-less route and invents a bare 200
+  for it — so the test would have passed for exactly the endpoint it existed to
+  catch. Verified empirically, then strengthened to assert `summary`,
+  `security` and `operationId`, and re-verified that it now fails when an
+  undocumented route is added.
+- **The spec failed OpenAPI validation (Task 16).** `redocly lint` reported one
+  error (`servers` must be present) and warnings for a missing `operationId` on
+  every operation. Both were fixed; `operationId` matters because it is what
+  client generators turn into method names. An optional `PUBLIC_URL` was added
+  so the deployed spec advertises the real host — optional deliberately, since a
+  new *required* var breaks every test until CI's env block is updated too.
+
+### Lint decisions worth knowing
+
+`require-await` is off: Fastify's plugin, hook and handler contracts require
+`async` regardless of whether the body awaits. The `no-unsafe-*` family is off
+in test files only: `inject().json()` returns `any` by design, so those rules
+fire on every correct assertion in a route test.
+
+### Exit-gate items NOT met
+
+- **Deployed to Railway** — no remote and no Railway project exist yet.
+- **CI green on first push** — no remote to push to. The workflow was instead
+  rehearsed locally against the same `pgvector/pgvector:pg16` image with only
+  CI's env vars: lint, typecheck and the full suite all pass.
+
+Everything else in the exit gate was observed and is recorded in the session
+that produced this repo.

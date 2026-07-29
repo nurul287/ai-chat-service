@@ -138,9 +138,13 @@ missing or malformed.
 ## 6. Generate the public domain
 
 - [ ] Railway → **Settings → Networking → Generate Domain**
-- [ ] Copy the resulting `https://<something>.up.railway.app`
-- [ ] Add it back as a variable: `PUBLIC_URL` = that URL
+- [ ] Add it back as a variable: `PUBLIC_URL` = that domain
 - [ ] Let it redeploy
+
+Railway's UI shows the domain **without** a scheme
+(`ai-chat-service-production-xxxx.up.railway.app`) — paste it exactly as shown.
+The service accepts a bare domain and adds `https://` itself; a fully-formed
+`https://…` URL also works if you prefer to paste that instead.
 
 `PUBLIC_URL` only affects the `servers` entry in the published OpenAPI spec, so
 the service is fully functional before you set it. It is a second pass because
@@ -248,7 +252,8 @@ API_KEY=sk_live_... BASE_URL=https://<your-domain> node examples/node/index.js
 | `ENOTFOUND`/`ENETUNREACH` on `db.<ref>.supabase.co`         | Direct connection is IPv6-only — use a pooler string (step 2)                                          |
 | `packages field missing or empty` during build              | Build ran pnpm 9; `packageManager` in package.json pins 11                                             |
 | `Refusing to run tests against a non-local database`        | `.env` points at production — restore localhost                                                        |
-| `Invalid configuration — …` at boot                         | A required env var is missing; the message names it                                                    |
+| `Invalid configuration — …` at boot                         | A required env var is missing or malformed; the message names which one                                |
+| Crash-loop immediately, `PUBLIC_URL: Invalid URL`           | Fixed as of this doc's version — update to the latest `main` if you still see this                     |
 | Boot exits immediately, `database unreachable`              | Wrong `DATABASE_URL`, or the password was not substituted                                              |
 | Healthcheck fails but logs look fine                        | `PORT` was set manually — remove it                                                                    |
 | Healthcheck fails, logs show `database unreachable at boot` | `DATABASE_URL` wrong/unreachable. The boot ping has a 10s connect timeout, so this appears within ~11s |

@@ -33,4 +33,35 @@ describe("parseConfig", () => {
   it("rejects an unknown NODE_ENV", () => {
     expect(() => parseConfig({ ...valid, NODE_ENV: "staging" })).toThrow(/NODE_ENV/);
   });
+
+  describe("PUBLIC_URL", () => {
+    it("is undefined when absent", () => {
+      expect(parseConfig(valid).PUBLIC_URL).toBeUndefined();
+    });
+
+    it("accepts a fully-formed URL as-is", () => {
+      const config = parseConfig({ ...valid, PUBLIC_URL: "https://api.example.com" });
+      expect(config.PUBLIC_URL).toBe("https://api.example.com");
+    });
+
+    // Railway's own dashboard shows a service's public domain WITHOUT a
+    // scheme (e.g. "my-app-production.up.railway.app"), and its own injected
+    // env vars (RAILWAY_PUBLIC_DOMAIN, RAILWAY_STATIC_URL) are bare domains
+    // too — so a bare domain here is the value a deploying user is most
+    // likely to paste, not an edge case. Crashing on it took down five
+    // consecutive deploys before this was diagnosed.
+    it("accepts a bare domain and adds https://", () => {
+      const config = parseConfig({
+        ...valid,
+        PUBLIC_URL: "ai-chat-service-production-acc4.up.railway.app",
+      });
+      expect(config.PUBLIC_URL).toBe("https://ai-chat-service-production-acc4.up.railway.app");
+    });
+
+    it("still rejects genuine garbage", () => {
+      expect(() => parseConfig({ ...valid, PUBLIC_URL: "not a url at all!!" })).toThrow(
+        /PUBLIC_URL/,
+      );
+    });
+  });
 });

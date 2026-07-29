@@ -12,7 +12,18 @@ const configSchema = z.object({
   // added to CI's env block. When set (on Railway), it becomes the primary
   // `servers` entry in the published OpenAPI spec so generated clients point at
   // the real deployment rather than localhost.
-  PUBLIC_URL: z.string().url().optional(),
+  //
+  // Accepts a bare domain, not just a full URL, and prepends https:// before
+  // validating. Railway's own dashboard shows a service's public domain WITHOUT
+  // a scheme, and Railway's own injected vars (RAILWAY_PUBLIC_DOMAIN,
+  // RAILWAY_STATIC_URL) are bare domains too — a strict z.string().url() here
+  // crashed at import time on exactly the value Railway's UI hands you to
+  // paste, which took down five consecutive deploys before being diagnosed.
+  PUBLIC_URL: z
+    .string()
+    .optional()
+    .transform((value) => (value && !/^https?:\/\//.test(value) ? `https://${value}` : value))
+    .pipe(z.string().url().optional()),
 });
 
 export type Config = z.infer<typeof configSchema>;

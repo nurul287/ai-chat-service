@@ -3512,12 +3512,18 @@ actually happened and why.
 in test files only: `inject().json()` returns `any` by design, so those rules
 fire on every correct assertion in a route test.
 
-### Exit-gate items NOT met
+### Exit-gate status
 
-- **Deployed to Railway** — no remote and no Railway project exist yet.
-- **CI green on first push** — no remote to push to. The workflow was instead
-  rehearsed locally against the same `pgvector/pgvector:pg16` image with only
-  CI's env vars: lint, typecheck and the full suite all pass.
+**CI green on first push — met.** Run
+[30457311026](https://github.com/nurul287/ai-chat-service/actions/runs/30457311026)
+passed in 1m9s on the first push to `main`. The workflow had also been
+rehearsed locally beforehand against the same `pgvector/pgvector:pg16` image
+with only CI's env vars.
 
-Everything else in the exit gate was observed and is recorded in the session
-that produced this repo.
+One annotation, not a failure: `actions/checkout@v4`, `actions/setup-node@v4`
+and `pnpm/action-setup@v4` still target Node 20, which GitHub has deprecated
+and now force-runs on Node 24. Bump those action majors when convenient.
+
+**Deployed to Railway — NOT met.** No Railway project exists yet. This is the
+only outstanding Sprint 1 exit-gate item; everything else was observed and is
+recorded in the session that produced this repo.

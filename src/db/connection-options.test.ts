@@ -2,6 +2,19 @@ import { describe, expect, it } from "vitest";
 import { buildClientOptions } from "./connection-options";
 
 describe("buildClientOptions", () => {
+  it("always sets a connect timeout", () => {
+    // server.ts pings the database before it listens. Without a bounded
+    // connect, an unreachable host hangs past any healthcheck window and the
+    // failure surfaces as "healthcheck failed" with nothing in the logs.
+    for (const url of [
+      "postgresql://postgres:postgres@127.0.0.1:55322/postgres",
+      "postgresql://postgres:p@db.abcdefgh.supabase.co:5432/postgres",
+      "postgresql://p:p@aws-1-ap-south-1.pooler.supabase.com:6543/postgres",
+    ]) {
+      expect(buildClientOptions(url).connect_timeout).toBe(10);
+    }
+  });
+
   it("does not require TLS for a local database", () => {
     const opts = buildClientOptions("postgresql://postgres:postgres@127.0.0.1:55322/postgres");
     expect(opts.ssl).toBeUndefined();

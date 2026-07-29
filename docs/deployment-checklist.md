@@ -242,15 +242,17 @@ API_KEY=sk_live_... BASE_URL=https://<your-domain> node examples/node/index.js
 
 ## If something is wrong
 
-| Symptom                                              | Cause                                                           |
-| ---------------------------------------------------- | --------------------------------------------------------------- |
-| `ENOTFOUND`/`ENETUNREACH` on `db.<ref>.supabase.co`  | Direct connection is IPv6-only — use a pooler string (step 2)   |
-| `packages field missing or empty` during build       | Build ran pnpm 9; `packageManager` in package.json pins 11      |
-| `Refusing to run tests against a non-local database` | `.env` points at production — restore localhost                 |
-| `Invalid configuration — …` at boot                  | A required env var is missing; the message names it             |
-| Boot exits immediately, `database unreachable`       | Wrong `DATABASE_URL`, or the password was not substituted       |
-| Healthcheck fails but logs look fine                 | `PORT` was set manually — remove it                             |
-| `type "vector" does not exist`                       | Migrations were not applied; run `pnpm db:push`                 |
-| `prepared statement ... does not exist`              | Should be handled automatically — file a bug with the URL shape |
-| Search returns `[]` for everything                   | Voyage key invalid or out of quota; check the deploy logs       |
-| `401 unauthorized` on a key that worked              | Its tenant row was truncated by a test run against this DB      |
+| Symptom                                                     | Cause                                                                                                  |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `ENOTFOUND`/`ENETUNREACH` on `db.<ref>.supabase.co`         | Direct connection is IPv6-only — use a pooler string (step 2)                                          |
+| `packages field missing or empty` during build              | Build ran pnpm 9; `packageManager` in package.json pins 11                                             |
+| `Refusing to run tests against a non-local database`        | `.env` points at production — restore localhost                                                        |
+| `Invalid configuration — …` at boot                         | A required env var is missing; the message names it                                                    |
+| Boot exits immediately, `database unreachable`              | Wrong `DATABASE_URL`, or the password was not substituted                                              |
+| Healthcheck fails but logs look fine                        | `PORT` was set manually — remove it                                                                    |
+| Healthcheck fails, logs show `database unreachable at boot` | `DATABASE_URL` wrong/unreachable. The boot ping has a 10s connect timeout, so this appears within ~11s |
+| Healthcheck fails with nothing in the logs                  | Process never reached `listen()` — check the start command and that `dist/` was built                  |
+| `type "vector" does not exist`                              | Migrations were not applied; run `pnpm db:push`                                                        |
+| `prepared statement ... does not exist`                     | Should be handled automatically — file a bug with the URL shape                                        |
+| Search returns `[]` for everything                          | Voyage key invalid or out of quota; check the deploy logs                                              |
+| `401 unauthorized` on a key that worked                     | Its tenant row was truncated by a test run against this DB                                             |

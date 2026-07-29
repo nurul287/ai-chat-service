@@ -40,6 +40,13 @@ export function buildClientOptions(databaseUrl: string): Options<Record<string, 
   const isTransactionPooled = url.port === "6543" || host.includes("pooler.");
 
   return {
+    // Without this, an unreachable or firewalled host hangs on TCP for roughly
+    // two minutes. server.ts pings the database BEFORE it listens, so that hang
+    // means the port never opens, the platform's healthcheck window expires,
+    // and nothing is logged — a misconfigured DATABASE_URL shows up as
+    // "healthcheck failed" with no explanation anywhere. Ten seconds turns that
+    // into a named error well inside any healthcheck timeout.
+    connect_timeout: 10,
     ...(isPrivate ? {} : { ssl: "require" as const }),
     ...(isTransactionPooled ? { prepare: false } : {}),
   };

@@ -8,6 +8,11 @@ const configSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4000),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   LOG_LEVEL: z.string().default("info"),
+  // Optional on purpose — a new REQUIRED var breaks every test until it is also
+  // added to CI's env block. When set (on Railway), it becomes the primary
+  // `servers` entry in the published OpenAPI spec so generated clients point at
+  // the real deployment rather than localhost.
+  PUBLIC_URL: z.string().url().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;

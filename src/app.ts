@@ -1,5 +1,7 @@
 import fastifyCors from "@fastify/cors";
 import fastifyHelmet from "@fastify/helmet";
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUI from "@fastify/swagger-ui";
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
@@ -8,9 +10,11 @@ import Fastify, {
 import {
   hasZodFastifySchemaValidationErrors,
   isResponseSerializationError,
+  jsonSchemaTransform,
   serializerCompiler,
   validatorCompiler,
 } from "fastify-type-provider-zod";
+import { config } from "./config";
 import documentsRoutes from "./documents/documents.routes";
 import { defaultLogger } from "./lib/logger";
 import authPlugin from "./plugins/auth";
@@ -38,7 +42,47 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
   // place that changes when it does.
   void app.register(fastifyCors, { origin: false });
 
+  // Registered BEFORE the routes so the spec builder sees them.
+  void app.register(fastifySwagger, {
+    openapi: {
+      info: {
+        title: "AI Chat Service API",
+        version: "0.1.0",
+        description:
+          "Multi-tenant document ingestion and hybrid retrieval. Push documents with PUT /v1/documents, then search them with POST /v1/search. All /v1 routes require a secret API key.",
+        license: { name: "UNLICENSED" },
+      },
+      // A `servers` entry is required by the OpenAPI spec, and without one a
+      // generated client has no base URL and Swagger UI's "Try it out" has
+      // nothing to call. PUBLIC_URL comes first when set, so a client generated
+      // against the deployed spec targets the deployment, not a developer's
+      // laptop.
+      servers: [
+        ...(config.PUBLIC_URL ? [{ url: config.PUBLIC_URL, description: "Production" }] : []),
+        { url: `http://localhost:${String(config.PORT)}`, description: "Local development" },
+      ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            description: "Your secret API key, e.g. `sk_live_…`. Server-side only.",
+          },
+        },
+      },
+    },
+    // Converts the Zod route schemas into JSON Schema for the spec. This is why
+    // the published reference cannot drift from request validation: they are
+    // the same object.
+    transform: jsonSchemaTransform,
+  });
+
+  void app.register(fastifySwaggerUI, { routePrefix: "/docs" });
+
   app.get("/health", async () => ({ status: "ok" }));
+
+  // Hidden from the spec it serves — a self-referential entry is just noise.
+  app.get("/openapi.json", { schema: { hide: true } }, async () => app.swagger());
 
   // The /v1 wrapper is the encapsulation boundary. authPlugin is `fp`-wrapped,
   // so its preHandler attaches to THIS scope — covering every route registered

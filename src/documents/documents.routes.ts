@@ -46,6 +46,7 @@ const documentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/documents",
     {
       schema: {
+        operationId: "upsertDocument",
         tags: ["Documents"],
         summary: "Create or replace a document",
         description:
@@ -69,6 +70,7 @@ const documentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/documents",
     {
       schema: {
+        operationId: "listDocuments",
         tags: ["Documents"],
         summary: "List this tenant's documents",
         security: [{ bearerAuth: [] }],
@@ -100,6 +102,7 @@ const documentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/documents/:externalId",
     {
       schema: {
+        operationId: "deleteDocument",
         tags: ["Documents"],
         summary: "Delete a document",
         security: [{ bearerAuth: [] }],
@@ -126,6 +129,7 @@ const documentsRoutes: FastifyPluginAsync = async (fastify) => {
     "/search",
     {
       schema: {
+        operationId: "searchDocuments",
         tags: ["Search"],
         summary: "Hybrid search over this tenant's documents",
         description:

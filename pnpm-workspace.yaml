@@ -1,2 +1,15 @@
+# This file exists only to hold pnpm settings — this is a single-package repo,
+# not a monorepo.
+#
+# `packages` is required even so: any pnpm-workspace.yaml makes pnpm treat the
+# directory as a workspace root, and pnpm 9 aborts with "packages field missing
+# or empty" without it. That is not hypothetical — it broke the Railway build,
+# because a builder can pick a different pnpm than you run locally. Listing the
+# root keeps the repo installable under pnpm 9, 10 and 11 alike.
+packages:
+  - "."
+
+# esbuild (via vitest/tsx) runs a postinstall script. pnpm 10+ refuses to run
+# build scripts without explicit approval, and pnpm 11 makes that a hard error.
 allowBuilds:
   esbuild: true

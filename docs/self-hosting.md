@@ -147,10 +147,46 @@ a flag someone can set inconsistently. See `src/db/connection-options.ts`.
 
 `railway.json` is committed and configures the build and healthcheck:
 
-- Build: Nixpacks, `pnpm build`
+- Build: **Railpack** (Railway's successor to Nixpacks, and the default for new
+  services)
 - Start: `node dist/server.js`
 - Healthcheck: `/health`, 30s timeout
 - Restart: on failure, max 3 retries
+
+### Why the pnpm version is pinned three ways
+
+Builders infer the toolchain, and a builder that picks a different pnpm than
+you run locally fails in ways that look nothing like a version problem. This
+repo saw both:
+
+- pnpm 9 cannot read a lockfile written by pnpm 11 (`ERR_PNPM_BROKEN_LOCKFILE`).
+- Nixpacks pinned `corepack@0.24.1`, too old to load pnpm 11's entrypoint
+  (`ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`).
+
+So the version is declared explicitly (`packageManager` in `package.json`, which
+Railpack honours via Corepack), **and** the repo is kept installable under
+pnpm 9, 10 and 11 alike — `pnpm-workspace.yaml` carries a `packages` field so
+older pnpm does not reject it, and the lockfile is a single YAML document.
+Belt and braces, because each failed guess costs a deploy cycle to discover.
+
+### Docker fallback
+
+`docker/Dockerfile` is a fully working alternative build, kept deliberately
+outside the repo root so Railway's Dockerfile auto-detection cannot override
+the Railpack setting above. It pins pnpm explicitly, runs as a non-root user,
+and ships production dependencies only.
+
+Use it if Railpack ever misbehaves — switch `railway.json` to:
+
+```json
+"build": { "builder": "DOCKERFILE", "dockerfilePath": "docker/Dockerfile" }
+```
+
+It can also be verified locally, which no builder-inferred image can:
+
+```bash
+docker build -f docker/Dockerfile -t ai-chat-service .
+```
 
 Create a **new, dedicated Railway project** — do not add this service to an
 existing project. Point it at this GitHub repo and set these service variables:

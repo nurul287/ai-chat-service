@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.github
+.env
+.env.*
+supabase/.temp
+supabase/.branches
+docs
+examples
+*.log

@@ -1,0 +1,6 @@
+dist/
+node_modules/
+pnpm-lock.yaml
+supabase/.temp/
+supabase/.branches/
+docs/plans/

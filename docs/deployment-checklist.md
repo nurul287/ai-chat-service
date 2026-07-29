@@ -50,13 +50,30 @@ From **Project Settings → Database**:
 - [ ] Substitute your saved password for the `[YOUR-PASSWORD]` placeholder
 - [ ] Note the **project ref** — the subdomain in `https://<ref>.supabase.co`
 
-Either the direct connection (port 5432) or the transaction pooler (6543) works;
-the service detects which one you gave it and configures the driver
-accordingly. Start with **direct (5432)** — it is simpler, and one Railway
-instance will not exhaust the connection limit.
+> **Use a pooler connection string, not the direct one.** Supabase's direct
+> host, `db.<ref>.supabase.co`, resolves to an **IPv6 address only** — the
+> IPv4 add-on is a paid extra. On an IPv4-only network (most home ISPs, many
+> corporate networks, some CI runners) it fails with `ENOTFOUND` or
+> `ENETUNREACH`, which reads like a wrong password or a dead project but is
+> neither. The pooler hostnames are IPv4-reachable.
+
+Pick either pooler, both listed on that page:
+
+| Connection             | Host                                 | Port | Use when                                      |
+| ---------------------- | ------------------------------------ | ---- | --------------------------------------------- |
+| **Session pooler**     | `aws-N-<region>.pooler.supabase.com` | 5432 | Default choice. Behaves like a normal client. |
+| **Transaction pooler** | `aws-N-<region>.pooler.supabase.com` | 6543 | Many concurrent instances / connection limits |
+| ~~Direct~~             | `db.<ref>.supabase.co`               | 5432 | Only if you have the IPv4 add-on              |
+
+The service inspects the URL and configures the driver itself — TLS on, and
+prepared statements off when it sees a pooler — so either works without extra
+settings.
 
 **Verify:** your connection string looks like
-`postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres`
+`postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres`
+
+Note the username is `postgres.<ref>` for pooler connections, not plain
+`postgres`.
 
 ---
 
@@ -146,18 +163,24 @@ From your local clone, with `DATABASE_URL` **temporarily** pointed at
 production:
 
 ```bash
-DATABASE_URL="postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres" \
+DATABASE_URL="postgresql://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres" \
   pnpm create-tenant "Acme Pharmacy" acme-pharmacy
 ```
 
 - [ ] **Copy the printed `sk_live_…` key immediately.** It is stored only as a
       SHA-256 hash and can never be displayed again.
 - [ ] Put it in your password manager.
+- [ ] Point your local `.env` back at **localhost**.
 
-> Afterwards, make sure your local `.env` still points at **localhost**.
-> `pnpm test` truncates `tenants`, `api_keys`, `documents` and `chunks` — with
-> a production `DATABASE_URL` in `.env`, a routine test run wipes production.
-> This is the single most dangerous step in this document.
+Prefer the inline form above over editing `.env`, so there is no window in
+which a production URL is sitting in your `.env` at all.
+
+> **This is enforced, not just advised.** `pnpm test` truncates `tenants`,
+> `api_keys`, `documents` and `chunks`, so a `.env` left pointing at production
+> would destroy it. The suite now refuses to start against any non-local host
+> and names the offending one (`src/test/local-db-guard.ts`). If you see
+> _"Refusing to run tests against a non-local database"_, that is the guard
+> doing its job — fix `DATABASE_URL`, do not bypass it.
 
 ---
 
@@ -219,12 +242,15 @@ API_KEY=sk_live_... BASE_URL=https://<your-domain> node examples/node/index.js
 
 ## If something is wrong
 
-| Symptom                                        | Cause                                                           |
-| ---------------------------------------------- | --------------------------------------------------------------- |
-| `Invalid configuration — …` at boot            | A required env var is missing; the message names it             |
-| Boot exits immediately, `database unreachable` | Wrong `DATABASE_URL`, or the password was not substituted       |
-| Healthcheck fails but logs look fine           | `PORT` was set manually — remove it                             |
-| `type "vector" does not exist`                 | Migrations were not applied; run `pnpm db:push`                 |
-| `prepared statement ... does not exist`        | Should be handled automatically — file a bug with the URL shape |
-| Search returns `[]` for everything             | Voyage key invalid or out of quota; check the deploy logs       |
-| `401 unauthorized` on a key that worked        | Its tenant row was truncated by a test run against this DB      |
+| Symptom                                              | Cause                                                           |
+| ---------------------------------------------------- | --------------------------------------------------------------- |
+| `ENOTFOUND`/`ENETUNREACH` on `db.<ref>.supabase.co`  | Direct connection is IPv6-only — use a pooler string (step 2)   |
+| `packages field missing or empty` during build       | Build ran pnpm 9; `packageManager` in package.json pins 11      |
+| `Refusing to run tests against a non-local database` | `.env` points at production — restore localhost                 |
+| `Invalid configuration — …` at boot                  | A required env var is missing; the message names it             |
+| Boot exits immediately, `database unreachable`       | Wrong `DATABASE_URL`, or the password was not substituted       |
+| Healthcheck fails but logs look fine                 | `PORT` was set manually — remove it                             |
+| `type "vector" does not exist`                       | Migrations were not applied; run `pnpm db:push`                 |
+| `prepared statement ... does not exist`              | Should be handled automatically — file a bug with the URL shape |
+| Search returns `[]` for everything                   | Voyage key invalid or out of quota; check the deploy logs       |
+| `401 unauthorized` on a key that worked              | Its tenant row was truncated by a test run against this DB      |

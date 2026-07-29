@@ -122,13 +122,18 @@ before the deploy that needs them.
 
 ### Connection string: which one to use
 
-Supabase offers several. Both of these work — the service detects the
-difference and configures the driver itself:
+Supabase offers several. **Use a pooler string.** The direct host,
+`db.<ref>.supabase.co`, resolves to an **IPv6 address only** unless you pay for
+the IPv4 add-on — on an IPv4-only network it fails with `ENOTFOUND`, which
+looks like a bad password or a dead project and is neither.
 
-| Connection         | Port | When                                                     |
-| ------------------ | ---- | -------------------------------------------------------- |
-| Direct             | 5432 | Fine for a single instance. Simplest.                    |
-| Transaction pooler | 6543 | Use if you scale to multiple replicas or hit conn limits |
+| Connection         | Host                                 | Port | When                                         |
+| ------------------ | ------------------------------------ | ---- | -------------------------------------------- |
+| Session pooler     | `aws-N-<region>.pooler.supabase.com` | 5432 | Default. IPv4-reachable.                     |
+| Transaction pooler | `aws-N-<region>.pooler.supabase.com` | 6543 | Many instances, or hitting connection limits |
+| Direct             | `db.<ref>.supabase.co`               | 5432 | Only with the IPv4 add-on                    |
+
+Pooler connections use `postgres.<ref>` as the username, not plain `postgres`.
 
 The service enables TLS for any non-private host, and disables prepared
 statements when it detects the transaction pooler — that pooler multiplexes one

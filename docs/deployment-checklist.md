@@ -105,7 +105,8 @@ that before deploying, because nothing will work without it.
 
 - [ ] Railway → **New Project** → **Deploy from GitHub repo**
 - [ ] Authorise Railway for the `nurul287/ai-chat-service` repo if prompted
-- [ ] Select the repo. Railway detects `railway.json` and uses Nixpacks
+- [ ] Select the repo. Railway reads `railway.json`, which pins the **Railpack**
+      builder (Nixpacks' successor — it guessed the wrong pnpm twice here)
 - [ ] Rename the project to `ai-chat-service`
 
 > Create a **new project**, not a new service inside an existing one. Separate

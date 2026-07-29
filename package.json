@@ -20,6 +20,9 @@
     "db:start": "pnpm dlx supabase@2.98.2 start",
     "db:reset": "pnpm dlx supabase@2.98.2 db reset",
     "db:status": "pnpm dlx supabase@2.98.2 status",
+    "db:link": "pnpm dlx supabase@2.98.2 link",
+    "db:push": "pnpm dlx supabase@2.98.2 db push",
+    "db:diff": "pnpm dlx supabase@2.98.2 db diff --linked",
     "create-tenant": "tsx src/scripts/create-tenant.ts"
   },
   "dependencies": {

@@ -3505,6 +3505,41 @@ actually happened and why.
   so the deployed spec advertises the real host — optional deliberately, since a
   new *required* var breaks every test until CI's env block is updated too.
 
+### Infrastructure isolation (decided after the first push)
+
+The service shares **no infrastructure** with any other project. Confirmed and
+enforced:
+
+- **Local Postgres** is its own Supabase project (`project_id =
+  "ai-chat-service"`), its own Docker stack, on its own `55321`–`55324` port
+  block. It can run concurrently with any other local Supabase stack, and
+  cannot be confused for one.
+- **Production Postgres** is a dedicated Supabase project; **production compute**
+  is a dedicated Railway project. Neither is shared with, nor nested inside,
+  another project's resources.
+- **The only shared dependency is the Voyage AI API key**, which is billed per
+  request rather than per project — so reusing one key across projects couples
+  nothing operationally.
+
+The single remaining Aurevo reference anywhere in the codebase is a comment in
+`vitest.config.ts` explaining *why* `fileParallelism` is disabled. That is
+lineage, not coupling.
+
+Two hosted-Postgres behaviours are handled in `src/db/connection-options.ts`,
+because neither is exercised by a localhost-only setup and both fail
+confusingly:
+
+- **TLS** is required for any non-private host. postgres.js does not negotiate
+  it by default, and a managed provider refuses the connection without it.
+- **Prepared statements are disabled on a transaction pooler** (port `6543`, or
+  a `pooler.` hostname). That pooler multiplexes one server connection across
+  many clients, so a statement prepared by one is invisible to the next —
+  surfacing as intermittent `prepared statement does not exist` errors under
+  concurrency, not as a clean failure at startup.
+
+Both are derived from the URL rather than exposed as env vars, so there is no
+way to deploy with a correct `DATABASE_URL` and a contradictory flag.
+
 ### Lint decisions worth knowing
 
 `require-await` is off: Fastify's plugin, hook and handler contracts require

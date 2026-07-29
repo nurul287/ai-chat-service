@@ -81,6 +81,63 @@ pnpm create-tenant "Acme Pharmacy" acme-pharmacy
 The API key is printed once and stored only as a hash. A self-serve dashboard
 arrives in Sprint 5.
 
+## Production topology
+
+This service owns its infrastructure end to end. It shares **nothing** with any
+other project — not a database, not a Railway project, not a Supabase
+organisation's resources beyond its own project.
+
+```
+GitHub: nurul287/ai-chat-service
+   │  push to main
+   ▼
+Railway project "ai-chat-service"   ──────►   Supabase project "ai-chat-service"
+  └── service: api (this repo)                  └── Postgres + pgvector
+      Nixpacks build, /health check                 migrations from supabase/migrations/
+```
+
+The only external dependency is the **Voyage AI** API key for embeddings.
+
+### Applying migrations to the hosted database
+
+Link once, then push. The Supabase CLI tracks which migrations have been
+applied, so re-running is safe.
+
+```bash
+pnpm db:link --project-ref <your-project-ref>   # prompts for the DB password
+pnpm db:push                                     # applies pending migrations
+```
+
+`--project-ref` is the subdomain of your Supabase project URL
+(`https://<ref>.supabase.co`). Verify afterwards:
+
+```sql
+select extname from pg_extension where extname = 'vector';
+select tablename from pg_tables where schemaname = 'public' order by 1;
+-- expect: api_keys, chunks, documents, tenants
+```
+
+Migrations are **not** applied automatically on deploy. Run `pnpm db:push`
+before the deploy that needs them.
+
+### Connection string: which one to use
+
+Supabase offers several. Both of these work — the service detects the
+difference and configures the driver itself:
+
+| Connection         | Port | When                                                     |
+| ------------------ | ---- | -------------------------------------------------------- |
+| Direct             | 5432 | Fine for a single instance. Simplest.                    |
+| Transaction pooler | 6543 | Use if you scale to multiple replicas or hit conn limits |
+
+The service enables TLS for any non-private host, and disables prepared
+statements when it detects the transaction pooler — that pooler multiplexes one
+server connection across many clients, so a prepared statement from one is
+invisible to the next. Getting this wrong produces intermittent
+`prepared statement does not exist` errors under load rather than a clean
+failure at startup, which is why it is derived from the URL rather than left to
+a flag someone can set inconsistently. See `src/db/connection-options.ts`.
+
 ## Deploying to Railway
 
 `railway.json` is committed and configures the build and healthcheck:
@@ -90,9 +147,25 @@ arrives in Sprint 5.
 - Healthcheck: `/health`, 30s timeout
 - Restart: on failure, max 3 retries
 
-Set `DATABASE_URL`, `VOYAGE_API_KEY`, `NODE_ENV=production`, and `PUBLIC_URL`
-in the Railway service variables. Migrations are **not** run automatically —
-apply them against the production database yourself before the first deploy.
+Create a **new, dedicated Railway project** — do not add this service to an
+existing project. Point it at this GitHub repo and set these service variables:
+
+| Variable         | Value                                     |
+| ---------------- | ----------------------------------------- |
+| `DATABASE_URL`   | Your Supabase connection string           |
+| `VOYAGE_API_KEY` | Your Voyage key                           |
+| `NODE_ENV`       | `production`                              |
+| `PUBLIC_URL`     | The Railway public domain, once generated |
+
+Do **not** set `PORT` — Railway injects it, and the service reads it.
+
+`PUBLIC_URL` is chicken-and-egg: the domain does not exist until the first
+deploy. Deploy without it, generate the domain, then set it and redeploy. Its
+only effect is the `servers` entry in `/openapi.json`, so the first deploy is
+fully functional without it.
+
+A step-by-step version of all of this is in
+[deployment-checklist.md](deployment-checklist.md).
 
 ## Operating notes
 

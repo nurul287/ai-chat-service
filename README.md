@@ -65,6 +65,16 @@ curl -X POST http://localhost:4000/v1/search \
 Full guides live in [`docs/`](docs/); runnable examples in
 [`examples/`](examples/).
 
+## Deploying
+
+This service is standalone: its own Supabase project, its own Railway project,
+its own repo. The only external dependency is a Voyage AI API key.
+
+Step-by-step manual setup is in
+[`docs/deployment-checklist.md`](docs/deployment-checklist.md); the topology and
+connection-string details are in
+[`docs/self-hosting.md`](docs/self-hosting.md).
+
 ## Scripts
 
 | Script                               | Purpose                                    |

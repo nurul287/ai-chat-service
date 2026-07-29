@@ -23,6 +23,8 @@
     "create-tenant": "tsx src/scripts/create-tenant.ts"
   },
   "dependencies": {
+    "@fastify/cors": "^11.3.0",
+    "@fastify/helmet": "^13.1.0",
     "@fastify/swagger": "^9.8.1",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",

@@ -19,6 +19,10 @@
 | `NODE_ENV`               | no       | `development` | `production` switches logging to JSON; `test` silences it.         |
 | `LOG_LEVEL`              | no       | `info`        | Any pino level.                                                    |
 | `PUBLIC_URL`             | no       | —             | Public base URL. Becomes the primary `servers` entry in the spec.  |
+| `CHAT_MODEL_PROVIDER`   | no          | `openrouter` | `openrouter` \| `anthropic`                                  |
+| `CHAT_MODEL_ID`         | no          | `deepseek/deepseek-r1:free` | See the delisting runbook below                |
+| `OPENROUTER_API_KEY`    | conditional | —            | Required when `CHAT_MODEL_PROVIDER=openrouter` (the default) |
+| `ANTHROPIC_API_KEY`     | conditional | —            | Required when `CHAT_MODEL_PROVIDER=anthropic`                |
 
 Configuration is validated by Zod at import time, so a missing or malformed
 variable crashes the process at boot with the variable's name — never as an
@@ -48,6 +52,21 @@ for f in supabase/migrations/*.sql; do
 done
 ```
 
+### Changing the schema
+
+Migrations are generated from `src/db/schema.ts`, not hand-written:
+
+1. Edit `src/db/schema.ts` — add or change a table, column, or index.
+2. Run `pnpm db:generate`. This produces a new file under
+   `supabase/migrations/`, named to match Supabase's own convention.
+3. Open the generated file and skim it — you're reviewing, not authoring.
+4. Apply it exactly like any other migration: `pnpm db:reset` locally,
+   `pnpm db:push` (via a linked project) in production.
+
+Supabase CLI still owns applying and tracking migrations, in both
+environments — nothing about `db:start`/`db:reset`/`db:push`/`db:link` changes.
+Only the *authoring* step moved from hand-written SQL to a generated diff.
+
 ### Why the non-default ports
 
 The local stack uses **55321–55324**, not Supabase's default 54321–54324, so it
@@ -55,6 +74,18 @@ can run alongside another local Supabase project. If you only ever run one, the
 defaults are fine — but sharing a port block risks something worse than a
 conflict: the service silently connecting to the _other_ project's database.
 The test suite truncates tables, so that mistake is not recoverable.
+
+### When `CHAT_MODEL_ID` stops working
+
+OpenRouter's free-tier models rotate and get delisted without warning — this
+is a known, expected occurrence, not a bug in this service. If chat requests
+start failing with a model-not-found or similar error from the provider:
+
+1. Check <https://openrouter.ai/models?supported_parameters=tools&free> for a
+   current replacement that supports tool calling (`search_knowledge` requires
+   it).
+2. Update `CHAT_MODEL_ID`, redeploy. No code change needed — this is exactly
+   why the model id is a config value rather than a constant.
 
 ## Running
 

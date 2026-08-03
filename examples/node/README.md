@@ -55,3 +55,15 @@ three.
   [`docs/errors.md`](../../docs/errors.md).
 - `PUT` is an upsert on `externalId`. Run the script twice: you still get three
   documents, not six.
+
+## Chat (streaming)
+
+```bash
+pnpm create-tenant "Example Co" example-co
+API_KEY=sk_live_... node examples/node/chat.js
+```
+
+Demonstrates a two-turn conversation: the first call omits `conversationId`
+and prints the one the server assigns; the second call sends it back to
+continue the same thread. Each reply that cites a document prints which one,
+from the `sources` event.

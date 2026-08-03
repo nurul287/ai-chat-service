@@ -113,7 +113,47 @@ Nothing in that query appears in the document — no "paracetamol", no "fever",
 no "pain". The match comes from the vector leg. Add `"topK": 10` to the body to
 ask for more results (default 5, maximum 20).
 
-## 4. List and delete
+## 4. Have a conversation
+
+`POST /v1/chat` streams a reply over Server-Sent Events, and can call
+`search_knowledge` — the same retrieval you just used directly — mid-reply to
+cite your documents.
+
+```bash
+curl -N -X POST "$BASE_URL/v1/chat" \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"externalUserId": "customer-482", "message": "Do you have anything for a headache?"}'
+```
+
+```
+event: token
+data: {"text":"Para"}
+
+event: token
+data: {"text":"cetamol should help."}
+
+event: sources
+data: {"documents":[{"externalId":"sku-1","title":"Paracetamol", ...}]}
+
+event: done
+data: {"conversationId":"...","messageId":"..."}
+```
+
+The response has no `conversationId` in the request above — the `done` event
+is how you learn the one that was created. Send it back on the next call to
+continue the same thread:
+
+```bash
+curl -N -X POST "$BASE_URL/v1/chat" \
+  -H "Authorization: Bearer $API_KEY" -H "Content-Type: application/json" \
+  -d '{"externalUserId": "customer-482", "conversationId": "<from the done event>", "message": "How many should I take?"}'
+```
+
+See [`examples/node/chat.js`](../examples/node/chat.js) for consuming this
+from Node with plain `fetch`, and [errors.md](errors.md) for what a mid-stream
+failure looks like.
+
+## 5. List and delete
 
 ```bash
 curl -s "$BASE_URL/v1/documents?page=1&limit=20" -H "Authorization: Bearer $API_KEY"

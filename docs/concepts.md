@@ -77,3 +77,20 @@ language question), fusion simply reduces to the vector ordering.
 improves ordering, but it is only worth shipping alongside an evaluation
 harness that can prove it helps on _your_ data rather than on a benchmark. Both
 arrive in Sprint 2.
+
+## Conversation
+
+A conversation belongs to a **tenant and one of that tenant's own end users**
+(`externalUserId` — your identifier for them, not ours). One end user can have
+many conversations; omit `conversationId` to start a new one, or send one back
+to continue an existing thread.
+
+Every message — yours and the assistant's — is preserved in full,
+indefinitely (retention lands in a later sprint). A short rolling summary is
+kept alongside the full log purely to bound how much context gets sent to the
+model on long conversations; it never replaces the underlying messages.
+
+The assistant can call `search_knowledge` mid-reply — the same retrieval
+`POST /v1/search` exposes directly, with a reranking pass added on top. What
+it found is returned as a `sources` event, so you can show citations without
+re-querying separately.

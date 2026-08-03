@@ -54,3 +54,27 @@ Common causes:
 The exact constraints for every field are in the OpenAPI spec at
 `GET /openapi.json`, generated from the same schemas that perform the
 validation — so they cannot drift from what the server actually enforces.
+
+## Streaming errors (`POST /v1/chat`)
+
+`POST /v1/chat` is the one endpoint in this API where an error can arrive
+**after** a `200` has already started — because once
+`Content-Type: text/event-stream` headers are sent, the HTTP status can never
+change. There are genuinely two error paths, not one:
+
+| When | Surface |
+|---|---|
+| Before streaming starts (bad body, unknown/foreign `conversationId`) | Normal JSON `400`/`404`, exactly like every other route in this API |
+| After streaming starts (rate-limited, model unavailable, any mid-stream failure) | An `error` SSE event, then the connection closes |
+
+A mid-stream `error` event has the same shape as every other error in this
+API:
+
+```
+event: error
+data: {"error":{"code":"internal_error","message":"..."}}
+```
+
+**A client must handle both.** Checking the initial HTTP status alone is not
+enough — a `200` does not guarantee the reply completed successfully. Listen
+for the `error` event type in the stream body as well.

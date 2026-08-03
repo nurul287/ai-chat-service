@@ -25,7 +25,8 @@
     "db:push": "pnpm dlx supabase@2.98.2 db push",
     "db:diff": "pnpm dlx supabase@2.98.2 db diff --linked",
     "db:generate": "drizzle-kit generate",
-    "create-tenant": "tsx src/scripts/create-tenant.ts"
+    "create-tenant": "tsx src/scripts/create-tenant.ts",
+    "eval:retrieval": "tsx src/scripts/eval-retrieval.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.27",

@@ -20,6 +20,9 @@ importers:
       '@fastify/helmet':
         specifier: ^13.1.0
         version: 13.1.0
+      '@fastify/sse':
+        specifier: 0.6.0
+        version: 0.6.0(fastify@5.10.0)
       '@fastify/swagger':
         specifier: ^9.8.1
         version: 9.8.1
@@ -653,6 +656,12 @@ packages:
 
   '@fastify/send@4.1.0':
     resolution: {integrity: sha512-TMYeQLCBSy2TOFmV95hQWkiTYgC/SEx7vMdV+wnZVX4tt8VBLKzmH8vV9OzJehV0+XBfg+WxPMt5wp+JBUKsVw==}
+
+  '@fastify/sse@0.6.0':
+    resolution: {integrity: sha512-+5g8zBbSN8ioKEfll2p6TXe75peq3uJ3/z44SakK5gNr9u6YqbOAHfTSRfXfvnUFzG97+3E055l360ruzsvgcQ==}
+    engines: {node: '>=20.20.2'}
+    peerDependencies:
+      fastify: ^5.x
 
   '@fastify/static@9.3.0':
     resolution: {integrity: sha512-9YMYRpCOtMBrqKYWcqiw7ykOrn4D0jogHpJrFS0KGeSuOwzKMM5/mjj7B0CFLVoQ6htqKYw//Zs7APn9DBq05w==}
@@ -2228,6 +2237,12 @@ snapshots:
       fast-decode-uri-component: 1.0.1
       http-errors: 2.0.1
       mime: 3.0.0
+
+  '@fastify/sse@0.6.0(fastify@5.10.0)':
+    dependencies:
+      '@fastify/error': 4.2.0
+      fastify: 5.10.0
+      fastify-plugin: 6.0.0
 
   '@fastify/static@9.3.0':
     dependencies:

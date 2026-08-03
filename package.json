@@ -32,6 +32,7 @@
     "@ai-sdk/voyage": "2.0.18",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.0",
+    "@fastify/sse": "0.6.0",
     "@fastify/swagger": "^9.8.1",
     "@fastify/swagger-ui": "^6.1.0",
     "@openrouter/ai-sdk-provider": "3.0.0",

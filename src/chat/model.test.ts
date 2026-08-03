@@ -12,7 +12,8 @@ vi.mock("../config", () => ({
 describe("chat model selection", () => {
   it("builds an OpenRouter model when CHAT_MODEL_PROVIDER is openrouter", async () => {
     const { chatModel } = await import("./model");
-    expect(chatModel.modelId).toBe("deepseek/deepseek-r1:free");
-    expect(chatModel.provider).toContain("openrouter");
+    const model = chatModel as { modelId: string; provider: string };
+    expect(model.modelId).toBe("deepseek/deepseek-r1:free");
+    expect(model.provider).toContain("openrouter");
   });
 });

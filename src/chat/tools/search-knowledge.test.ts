@@ -4,6 +4,12 @@ vi.mock("../../retrieval/retrieve", () => ({
   retrieve: vi.fn(),
 }));
 
+const toolExecOptions = {
+  toolCallId: "test",
+  messages: [],
+  context: {},
+};
+
 describe("searchKnowledgeTool", () => {
   it("calls retrieve with the closed-over tenantId, hybrid+rerank mode, and the model's query", async () => {
     const { retrieve } = await import("../../retrieval/retrieve");
@@ -13,7 +19,7 @@ describe("searchKnowledgeTool", () => {
 
     const { searchKnowledgeTool } = await import("./search-knowledge");
     const tool = searchKnowledgeTool("tenant-a");
-    const result = await tool.execute!({ query: "fever" }, {} as never);
+    const result = await tool.execute({ query: "fever" }, toolExecOptions);
 
     expect(retrieve).toHaveBeenCalledWith("tenant-a", "fever", 5, { mode: "hybrid+rerank" });
     expect(result).toHaveLength(1);
@@ -25,7 +31,7 @@ describe("searchKnowledgeTool", () => {
 
     const { searchKnowledgeTool } = await import("./search-knowledge");
     const tool = searchKnowledgeTool("tenant-a");
-    await tool.execute!({ query: "fever", topK: 8 }, {} as never);
+    await tool.execute({ query: "fever", topK: 8 }, toolExecOptions);
 
     expect(retrieve).toHaveBeenCalledWith("tenant-a", "fever", 8, { mode: "hybrid+rerank" });
   });
@@ -34,7 +40,7 @@ describe("searchKnowledgeTool", () => {
     const { searchKnowledgeTool } = await import("./search-knowledge");
     const tool = searchKnowledgeTool("tenant-a");
 
-    const shape = (tool.inputSchema as { shape: Record<string, unknown> }).shape;
+    const shape = (tool.inputSchema as unknown as { shape: Record<string, unknown> }).shape;
     expect(shape).not.toHaveProperty("tenantId");
     expect(Object.keys(shape)).toEqual(["query", "topK"]);
   });

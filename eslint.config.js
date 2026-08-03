@@ -11,7 +11,7 @@ module.exports = tseslint.config(
       parserOptions: {
         // vitest.config.ts sits outside `src`, so it is not in tsconfig's
         // `include` — this lets the type-aware rules still lint it.
-        projectService: { allowDefaultProject: ["vitest.config.ts"] },
+        projectService: { allowDefaultProject: ["vitest.config.ts", "drizzle.config.ts"] },
         tsconfigRootDir: __dirname,
       },
     },

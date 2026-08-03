@@ -52,8 +52,7 @@ describe("conversations, messages, chat_metrics schema", () => {
       db.insert(messages).values({
         conversationId: conv!.id,
         tenantId: tenant!.id,
-        // @ts-expect-error -- deliberately invalid role for this test
-        role: "system",
+        role: "system" as "user",
         content: "x",
       }),
     ).rejects.toThrow();

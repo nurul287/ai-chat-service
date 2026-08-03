@@ -40,6 +40,20 @@ a fast-moving library. Two things changed from the design sketch as a result:
    differ from the AI SDK's generic ones — both are used in this plan,
    mapped explicitly where they meet).
 
+**Migration tooling changed after the design was written, based on direct
+user feedback during plan-writing.** The design doc didn't specify how
+migrations get authored; Sprint 1's precedent was hand-written SQL applied via
+Supabase CLI. Told plainly that hand-writing SQL isn't a comfortable fit going
+forward, Task 1 now uses `drizzle-kit generate` to produce migration SQL from
+`src/db/schema.ts` instead. This does **not** change how migrations are
+*applied* — Supabase CLI (`db:start`/`db:reset`/`db:push`/`db:link`) is
+unchanged in every environment, including the already-documented production
+runbook. Verified before committing to this approach: `drizzle-kit generate`
+correctly emits Postgres-specific DDL this schema actually needs (HNSW vector
+indexes, explicit `CHECK` constraints), and its Supabase-compatible filename
+prefix (`migrations: { prefix: "supabase" }`) means the two tools' outputs
+coexist without any custom reconciliation.
+
 ## Global Constraints
 
 Everything from Sprint 1's Global Constraints still applies. Additions for
@@ -65,12 +79,15 @@ this sprint:
 
 ---
 
-### Task 1: `conversations`, `messages`, `chat_metrics` schema
+### Task 1: `conversations`, `messages`, `chat_metrics` schema — via Drizzle Kit
 
 **Files:**
-- Create: `supabase/migrations/003_conversations_messages_metrics.sql`
+- Create: `drizzle.config.ts`
 - Modify: `src/db/schema.ts`
+- Modify: `package.json`
 - Test: `src/db/chat-schema.test.ts`
+- Generated (not hand-written): a new file under `supabase/migrations/`,
+  produced by `drizzle-kit generate` in Step 6.
 
 **Interfaces:**
 - Consumes: `tenants` from Sprint 1.
@@ -79,57 +96,62 @@ this sprint:
   `Message = typeof messages.$inferSelect`,
   `ChatMetric = typeof chatMetrics.$inferSelect`.
 
-- [ ] **Step 1: Write the migration**
+**Change from the original plan: migrations are now Drizzle-Kit-generated,
+not hand-written.** `drizzle-kit` was already a dependency from Sprint 1 but
+never actually used for generation — every migration so far was written by
+hand. Going forward, schema changes happen by editing `src/db/schema.ts` and
+running one command; you should not need to write `CREATE TABLE` SQL
+yourself. Supabase CLI keeps doing exactly what it already does —
+`pnpm db:start`/`db:reset`/`db:push`, and the production deployment runbook
+in `docs/deployment-checklist.md` — completely unchanged. Only *which tool
+writes the SQL file* changes; which tool *applies* it does not.
 
-Create `supabase/migrations/003_conversations_messages_metrics.sql`:
+**A one-time wrinkle, explained now so it isn't surprising in Step 6:**
+`drizzle-kit generate` has never run on this project before, so it has no
+prior snapshot to diff against. Its first run will therefore generate `CREATE
+TABLE IF NOT EXISTS` statements for **all seven tables** in `schema.ts` —
+including the four that already exist from Sprint 1 (`tenants`, `api_keys`,
+`documents`, `chunks`), not just this task's three new ones. This is
+harmless, not a bug: `IF NOT EXISTS` means Postgres skips those four
+statements entirely once it sees the tables already exist — and because this
+generated file's Supabase-compatible timestamp filename always sorts *after*
+`001_...` and `002_...`, migrations 001 and 002 always run first and create
+those four tables correctly before this file ever gets a chance to try. Step
+7 verifies this is actually true against a real database rather than trusting
+the reasoning blindly.
 
-```sql
-create table public.conversations (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  external_user_id text not null,
-  intent_summary text,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+- [ ] **Step 1: Configure Drizzle Kit**
 
-create index idx_conversations_tenant_user on public.conversations (tenant_id, external_user_id);
+Create `drizzle.config.ts` in the repo root:
 
-create table public.messages (
-  id uuid primary key default gen_random_uuid(),
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  role text not null check (role in ('user', 'assistant')),
-  content text not null,
-  created_at timestamptz not null default now()
-);
+```ts
+import "dotenv/config";
+import { defineConfig } from "drizzle-kit";
 
-create index idx_messages_conversation on public.messages (conversation_id, created_at);
-create index idx_messages_tenant on public.messages (tenant_id);
-
-create table public.chat_metrics (
-  id uuid primary key default gen_random_uuid(),
-  conversation_id uuid not null references public.conversations(id) on delete cascade,
-  message_id uuid not null references public.messages(id) on delete cascade,
-  tenant_id uuid not null references public.tenants(id) on delete cascade,
-  model_id text not null,
-  latency_ms integer not null,
-  prompt_tokens integer,
-  completion_tokens integer,
-  total_tokens integer,
-  cost_credits numeric,
-  tool_call_count integer not null default 0,
-  retrieved_chunk_count integer not null default 0,
-  created_at timestamptz not null default now()
-);
-
-create index idx_chat_metrics_tenant on public.chat_metrics (tenant_id);
+export default defineConfig({
+  schema: "./src/db/schema.ts",
+  out: "./supabase/migrations",
+  dialect: "postgresql",
+  // Matches Supabase's own timestamp-based migration filename convention, so
+  // Supabase CLI's db:reset/db:push apply these files exactly like the
+  // hand-written ones from Sprint 1 — no change to how migrations are applied,
+  // only to how they're written.
+  migrations: { prefix: "supabase" },
+  dbCredentials: { url: process.env.DATABASE_URL! },
+});
 ```
 
-- [ ] **Step 2: Apply the migration**
+`dotenv/config` is imported directly here (rather than relying on the app's
+own config module) because `drizzle-kit` runs as a standalone CLI, outside the
+app's normal boot sequence — it needs `.env` loaded on its own.
 
-Run: `pnpm db:reset`
-Expected: applies migrations 001, 002, 003 with no errors.
+- [ ] **Step 2: Add the generate script**
+
+Add to `package.json`'s `scripts`:
+
+```json
+"db:generate": "drizzle-kit generate"
+```
 
 - [ ] **Step 3: Write the failing test**
 
@@ -233,7 +255,8 @@ Append to `src/db/schema.ts` (merge new imports into the existing
 `drizzle-orm/pg-core` import line rather than adding a second one):
 
 ```ts
-import { numeric } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, numeric } from "drizzle-orm/pg-core";
 
 export const conversations = pgTable(
   "conversations",
@@ -273,6 +296,13 @@ export const messages = pgTable(
   (table) => [
     index("idx_messages_conversation").on(table.conversationId, table.createdAt),
     index("idx_messages_tenant").on(table.tenantId),
+    // A real, generatable CHECK constraint — not just .$type<>()'s
+    // TypeScript-only assertion. This is what makes drizzle-kit generate
+    // actually emit `CONSTRAINT ... CHECK (role in ('user','assistant'))`
+    // into the migration SQL; .$type<>() alone produces no SQL at all, and
+    // without this the "rejects a message role outside user/assistant" test
+    // below would find nothing at the database level to reject.
+    check("messages_role_check", sql`${table.role} in ('user', 'assistant')`),
   ],
 );
 
@@ -310,24 +340,76 @@ export type ChatMetric = typeof chatMetrics.$inferSelect;
 ```
 
 The `role` column's `.$type<"user" | "assistant">()` gives Drizzle's TypeScript
-side the narrow union; the SQL `check` constraint is what actually enforces it
-at the database level (Drizzle's `$type` is a compile-time assertion only).
+side the narrow union; the explicit `check()` constraint above is what
+actually enforces it at the database level — `$type` alone is a
+compile-time-only assertion and generates no SQL.
 
-- [ ] **Step 6: Run the test to verify it passes**
+- [ ] **Step 6: Generate the migration**
+
+```bash
+pnpm db:generate
+```
+
+Expected: a new file appears under `supabase/migrations/`, named with a
+`supabase`-style timestamp prefix (e.g.
+`supabase20260803193000_add_conversations_messages_chat_metrics.sql` — the
+exact name doesn't matter, drizzle-kit derives it). Open it and confirm it
+contains:
+- `CREATE TABLE IF NOT EXISTS "conversations" (...)`,
+  `"messages" (...)`, `"chat_metrics" (...)` — the three new tables, in full,
+  including the `CONSTRAINT "messages_role_check" CHECK (...)`.
+- `CREATE TABLE IF NOT EXISTS "tenants" (...)`, `"api_keys"`, `"documents"`,
+  `"chunks"` — these are the expected redundant-but-harmless recreation
+  attempts explained above, since this is drizzle-kit's first generation on
+  this project and it has no prior baseline. Leave them in the generated
+  file as-is; do not hand-edit them out. The next step proves they are inert.
+
+- [ ] **Step 7: Apply it and confirm the redundant statements are truly inert**
+
+```bash
+pnpm db:reset
+```
+
+Expected: applies `001_tenants_and_api_keys.sql`, `002_documents_and_chunks.sql`,
+then the newly generated file, all with **no errors** — confirming the
+`IF NOT EXISTS` guards actually no-op cleanly against a database where 001 and
+002 just created those four tables moments earlier in the same reset. Then
+verify the three new tables exist with the right shape:
+
+```bash
+docker exec supabase_db_ai-chat-service psql -U postgres -d postgres -t -c \
+  "select tablename from pg_tables where schemaname='public' order by 1;"
+# expect: api_keys, chat_metrics, chunks, conversations, documents, messages, tenants
+
+docker exec supabase_db_ai-chat-service psql -U postgres -d postgres -t -c \
+  "select conname from pg_constraint where conname = 'messages_role_check';"
+# expect: messages_role_check (confirms the CHECK constraint actually exists,
+# not just the .$type<>() TypeScript assertion)
+```
+
+If either check fails, do not proceed — this is the one place this task's
+approach genuinely needed verifying rather than assumed, and Step 8's test
+would otherwise pass or fail for the wrong reason.
+
+- [ ] **Step 8: Run the test to verify it passes**
 
 Run: `pnpm test src/db/chat-schema.test.ts`
 Expected: PASS — 4 tests.
 
-- [ ] **Step 7: Confirm Sprint 1 is untouched**
+- [ ] **Step 9: Confirm Sprint 1 is untouched**
 
 Run: `pnpm test`
 Expected: all Sprint 1 suites still pass unmodified — this task only adds tables.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add supabase/migrations/003_conversations_messages_metrics.sql src/db/
-git commit -m "feat(db): add conversations, messages and chat_metrics schema"
+git add drizzle.config.ts package.json pnpm-lock.yaml supabase/migrations/ src/db/
+git commit -m "feat(db): add conversations, messages and chat_metrics schema
+
+Migrations are now generated via drizzle-kit from src/db/schema.ts rather
+than hand-written. Supabase CLI still applies them (db:reset/db:push
+unchanged) - only the authoring step changes."
 ```
 
 ---
@@ -3585,7 +3667,29 @@ it found is returned as a `sources` event, so you can show citations without
 re-querying separately.
 ```
 
-- [ ] **Step 3: Add the new env vars to `docs/self-hosting.md`**
+- [ ] **Step 3: Document the schema-change workflow, and add the new env vars,
+      in `docs/self-hosting.md`**
+
+Add a new subsection to the "Database setup" section — this is the first
+place a future maintainer needs to know migrations are now generated, not
+hand-written:
+
+```markdown
+### Changing the schema
+
+Migrations are generated from `src/db/schema.ts`, not hand-written:
+
+1. Edit `src/db/schema.ts` — add or change a table, column, or index.
+2. Run `pnpm db:generate`. This produces a new file under
+   `supabase/migrations/`, named to match Supabase's own convention.
+3. Open the generated file and skim it — you're reviewing, not authoring.
+4. Apply it exactly like any other migration: `pnpm db:reset` locally,
+   `pnpm db:push` (via a linked project) in production.
+
+Supabase CLI still owns applying and tracking migrations, in both
+environments — nothing about `db:start`/`db:reset`/`db:push`/`db:link` changes.
+Only the *authoring* step moved from hand-written SQL to a generated diff.
+```
 
 Add rows to the existing environment variable table:
 

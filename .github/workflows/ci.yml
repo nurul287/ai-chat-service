@@ -34,6 +34,7 @@ jobs:
       # CI is deliberate — CI must never be able to spend money.
       VOYAGE_API_KEY: ci-test-key
       VOYAGE_EMBEDDING_MODEL: voyage-3
+      OPENROUTER_API_KEY: ci-test-key
       NODE_ENV: test
 
     steps:

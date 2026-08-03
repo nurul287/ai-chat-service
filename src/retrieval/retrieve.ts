@@ -1,7 +1,11 @@
 import { and, cosineDistance, eq, sql } from "drizzle-orm";
 import { db } from "../db";
 import { chunks, documents } from "../db/schema";
-import { embedQuery } from "../lib/voyage";
+import { embedQuery, rerank } from "../lib/voyage";
+
+export type RetrieveOptions = {
+  mode?: "hybrid" | "hybrid+rerank";
+};
 
 export type RetrievedChunk = {
   documentId: string;
@@ -89,6 +93,7 @@ export async function retrieve(
   tenantId: string,
   query: string,
   topK = 5,
+  opts: RetrieveOptions = {},
 ): Promise<RetrievedChunk[]> {
   const embedding = await embedQuery(query);
 
@@ -97,7 +102,21 @@ export async function retrieve(
     keywordSearch(tenantId, query, CANDIDATE_POOL),
   ]);
 
-  return rrfFuse([vectorHits, keywordHits])
-    .slice(0, topK)
-    .map(({ id: _id, ...chunk }) => chunk);
+  const fused = rrfFuse([vectorHits, keywordHits]);
+
+  if (opts.mode !== "hybrid+rerank") {
+    return fused.slice(0, topK).map(({ id: _id, ...chunk }) => chunk);
+  }
+
+  try {
+    const order = await rerank(
+      query,
+      fused.map((c) => c.content),
+      topK,
+    );
+    return order.map((i) => fused[i]!).map(({ id: _id, ...chunk }) => chunk);
+  } catch {
+    // Degrade to fusion order — a rerank outage must never break search.
+    return fused.slice(0, topK).map(({ id: _id, ...chunk }) => chunk);
+  }
 }

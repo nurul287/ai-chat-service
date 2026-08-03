@@ -12,6 +12,7 @@ vi.mock("../lib/voyage", () => ({
     texts.map(() => Array.from({ length: 1024 }, () => 0.01)),
   ),
   embedQuery: vi.fn(async () => Array.from({ length: 1024 }, () => 0.01)),
+  rerank: vi.fn(),
 }));
 
 async function clean() {
@@ -98,5 +99,41 @@ describe("retrieve", () => {
   it("returns an empty array when the tenant has no documents", async () => {
     const tenant = await makeTenant("empty");
     expect(await retrieve(tenant.id, "anything", 3)).toEqual([]);
+  });
+});
+
+describe("retrieve with reranking", () => {
+  it("defaults to plain hybrid mode when opts is omitted", async () => {
+    const { rerank } = await import("../lib/voyage");
+    const tenant = await makeTenant("acme");
+    await upsertDocument(tenant.id, { externalId: "sku-1", content: "Paracetamol relieves fever." });
+
+    await retrieve(tenant.id, "fever", 3);
+
+    expect(rerank).not.toHaveBeenCalled();
+  });
+
+  it("calls rerank when mode is hybrid+rerank", async () => {
+    const { rerank } = await import("../lib/voyage");
+    vi.mocked(rerank).mockResolvedValue([0]);
+    const tenant = await makeTenant("acme");
+    await upsertDocument(tenant.id, { externalId: "sku-1", content: "Paracetamol relieves fever." });
+
+    const results = await retrieve(tenant.id, "fever", 3, { mode: "hybrid+rerank" });
+
+    expect(rerank).toHaveBeenCalledOnce();
+    expect(results[0]!.externalId).toBe("sku-1");
+  });
+
+  it("degrades to fusion order when rerank throws", async () => {
+    const { rerank } = await import("../lib/voyage");
+    vi.mocked(rerank).mockRejectedValue(new Error("Voyage rerank request failed (500)"));
+    const tenant = await makeTenant("acme");
+    await upsertDocument(tenant.id, { externalId: "sku-1", content: "Paracetamol relieves fever." });
+
+    const results = await retrieve(tenant.id, "fever", 3, { mode: "hybrid+rerank" });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]!.externalId).toBe("sku-1");
   });
 });

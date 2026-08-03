@@ -1,4 +1,8 @@
+import { createVoyage } from "@ai-sdk/voyage";
+import { rerank as aiRerank } from "ai";
 import { config } from "../config";
+
+const voyage = createVoyage({ apiKey: config.VOYAGE_API_KEY });
 
 const VOYAGE_EMBEDDINGS_URL = "https://api.voyageai.com/v1/embeddings";
 
@@ -39,4 +43,24 @@ export async function embedQuery(text: string): Promise<number[]> {
   const [embedding] = await embed([text], "query");
   if (!embedding) throw new Error("Voyage returned no embedding for the query");
   return embedding;
+}
+
+/**
+ * Returns the original indices of `texts`, reordered by relevance to `query`
+ * and truncated to `topN`. Index-based rather than returning reranked text
+ * directly, so a caller with richer objects (see retrieve.ts) can reorder its
+ * own array without this function needing to know that shape.
+ *
+ * Throws on failure rather than swallowing it — the caller decides whether
+ * and how to degrade (retrieve() falls back to fusion order; this function
+ * itself stays a thin, honest wrapper).
+ */
+export async function rerank(query: string, texts: string[], topN: number): Promise<number[]> {
+  const { ranking } = await aiRerank({
+    model: voyage.reranking("rerank-2.5-lite"),
+    query,
+    documents: texts,
+    topN,
+  });
+  return ranking.map((r) => r.originalIndex);
 }

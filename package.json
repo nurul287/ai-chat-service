@@ -24,6 +24,7 @@
     "db:link": "pnpm dlx supabase@2.98.2 link",
     "db:push": "pnpm dlx supabase@2.98.2 db push",
     "db:diff": "pnpm dlx supabase@2.98.2 db diff --linked",
+    "db:generate": "drizzle-kit generate",
     "create-tenant": "tsx src/scripts/create-tenant.ts"
   },
   "dependencies": {

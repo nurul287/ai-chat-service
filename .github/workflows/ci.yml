@@ -35,6 +35,8 @@ jobs:
       VOYAGE_API_KEY: ci-test-key
       VOYAGE_EMBEDDING_MODEL: voyage-3
       OPENROUTER_API_KEY: ci-test-key
+      CHAT_MODEL_PROVIDER: openrouter
+      CHAT_MODEL_ID: deepseek/deepseek-r1:free
       NODE_ENV: test
 
     steps:

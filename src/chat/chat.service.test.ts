@@ -140,7 +140,10 @@ describe("runChat", () => {
 
     expect(events).toContainEqual({
       event: "error",
-      data: { error: { code: "internal_error", message: "rate limited" } },
+      data: {
+        conversationId: "conv-1",
+        error: { code: "internal_error", message: "rate limited" },
+      },
     });
     // Only the user's message was appended, never a second (assistant) call.
     expect(appendMessage).toHaveBeenCalledTimes(1);

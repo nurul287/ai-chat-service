@@ -90,6 +90,20 @@ describe("messages", () => {
     expect(msg.content).toBe("Do you have anything for a headache?");
   });
 
+  it("appendMessage bumps the parent conversation updatedAt so listConversations reflects recent activity", async () => {
+    const tenant = await makeTenant("acme");
+    const older = await createConversation(tenant.id, "customer-482");
+    const newer = await createConversation(tenant.id, "customer-482");
+
+    let { data } = await listConversations(tenant.id, "customer-482", 1, 20);
+    expect(data[0]!.id).toBe(newer.id);
+
+    await appendMessage(older.id, tenant.id, "user", "wake up");
+
+    ({ data } = await listConversations(tenant.id, "customer-482", 1, 20));
+    expect(data[0]!.id).toBe(older.id);
+  });
+
   it("listMessages returns ascending order (oldest first)", async () => {
     const tenant = await makeTenant("acme");
     const conv = await createConversation(tenant.id, "customer-482");

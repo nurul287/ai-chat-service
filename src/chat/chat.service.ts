@@ -32,7 +32,10 @@ export type ChatWireEvent =
   | { event: "token"; data: { text: string } }
   | { event: "sources"; data: { documents: RetrievedChunk[] } }
   | { event: "done"; data: { conversationId: string; messageId: string } }
-  | { event: "error"; data: { error: { code: string; message: string } } };
+  | {
+      event: "error";
+      data: { conversationId: string; error: { code: string; message: string } };
+    };
 
 const MAX_TOOL_LOOP_STEPS = 4;
 
@@ -79,7 +82,13 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
         // finish (see the design spec) — an errored turn persists the user's
         // message (already appended above, so a retry has something to
         // continue from) but never a partial assistant reply.
-        yield { event: "error", data: { error: { code: event.code, message: event.message } } };
+        yield {
+          event: "error",
+          data: {
+            conversationId: conversation.id,
+            error: { code: event.code, message: event.message },
+          },
+        };
         return;
     }
   }

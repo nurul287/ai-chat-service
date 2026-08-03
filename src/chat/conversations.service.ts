@@ -64,6 +64,10 @@ export async function appendMessage(
   content: string,
 ): Promise<Message> {
   const [msg] = await db.insert(messages).values({ conversationId, tenantId, role, content }).returning();
+  await db
+    .update(conversations)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(eq(conversations.id, conversationId));
   return msg!;
 }
 

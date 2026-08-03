@@ -72,8 +72,12 @@ API:
 
 ```
 event: error
-data: {"error":{"code":"internal_error","message":"..."}}
+data: {"conversationId":"...","error":{"code":"internal_error","message":"..."}}
 ```
+
+The `conversationId` is included so a client can retry on the same thread after
+a first-turn failure — the user's message is already persisted even when the
+assistant reply never completes.
 
 **A client must handle both.** Checking the initial HTTP status alone is not
 enough — a `200` does not guarantee the reply completed successfully. Listen

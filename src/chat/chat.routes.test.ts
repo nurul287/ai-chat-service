@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
+import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { apiKeys, chatMetrics, conversations, messages, tenants } from "../db/schema";
 import { createTenant, issueApiKey } from "../tenants/tenants.service";
@@ -129,6 +130,37 @@ describe("POST /v1/chat", () => {
     expect(res.body).toContain('"text":"Paracetamol"');
     expect(res.body).toContain("event: sources");
     expect(res.body).toContain("event: done");
+  });
+
+  it("yields a mid-stream error SSE event, after the 200 has already started, and persists no assistant message", async () => {
+    const { key, tenant } = await tenantWithKey("acme");
+    const [conv] = await db
+      .insert(conversations)
+      .values({ tenantId: tenant.id, externalUserId: "customer-482" })
+      .returning();
+    const { streamText } = await import("ai");
+    vi.mocked(streamText).mockReturnValue(
+      fakeStreamTextResult([{ type: "error", error: new Error("rate limited") }]) as never,
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/v1/chat",
+      headers: { authorization: `Bearer ${key}`, accept: "text/event-stream" },
+      payload: { externalUserId: "customer-482", conversationId: conv!.id, message: "hi" },
+    });
+
+    // The status can never change once SSE headers are sent, even though the
+    // turn itself failed — see docs/errors.md's pre-stream vs. mid-stream split.
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+    expect(res.body).toContain("event: error");
+    expect(res.body).toContain(`"conversationId":"${conv!.id}"`);
+    expect(res.body).toContain('"code":"internal_error"');
+
+    const persisted = await db.select().from(messages).where(eq(messages.conversationId, conv!.id));
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0]!.role).toBe("user");
   });
 });
 

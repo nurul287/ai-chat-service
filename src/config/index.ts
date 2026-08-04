@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { z } from "zod";
 
-const configSchema = z.object({
+const baseConfigSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   VOYAGE_API_KEY: z.string().min(1, "VOYAGE_API_KEY is required"),
   VOYAGE_EMBEDDING_MODEL: z.string().default("voyage-3"),
@@ -24,6 +24,27 @@ const configSchema = z.object({
     .optional()
     .transform((value) => (value && !/^https?:\/\//.test(value) ? `https://${value}` : value))
     .pipe(z.string().url().optional()),
+  CHAT_MODEL_PROVIDER: z.enum(["openrouter", "anthropic"]).default("openrouter"),
+  CHAT_MODEL_ID: z.string().default("deepseek/deepseek-r1:free"),
+  OPENROUTER_API_KEY: z.string().optional(),
+  ANTHROPIC_API_KEY: z.string().optional(),
+});
+
+const configSchema = baseConfigSchema.superRefine((data, ctx) => {
+  if (data.CHAT_MODEL_PROVIDER === "openrouter" && !data.OPENROUTER_API_KEY) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["OPENROUTER_API_KEY"],
+      message: "OPENROUTER_API_KEY is required when CHAT_MODEL_PROVIDER is openrouter",
+    });
+  }
+  if (data.CHAT_MODEL_PROVIDER === "anthropic" && !data.ANTHROPIC_API_KEY) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["ANTHROPIC_API_KEY"],
+      message: "ANTHROPIC_API_KEY is required when CHAT_MODEL_PROVIDER is anthropic",
+    });
+  }
 });
 
 export type Config = z.infer<typeof configSchema>;

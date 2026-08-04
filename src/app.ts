@@ -1,5 +1,6 @@
 import fastifyCors from "@fastify/cors";
 import fastifyHelmet from "@fastify/helmet";
+import fastifySSE from "@fastify/sse";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUI from "@fastify/swagger-ui";
 import Fastify, {
@@ -15,6 +16,7 @@ import {
   validatorCompiler,
 } from "fastify-type-provider-zod";
 import { config } from "./config";
+import chatRoutes from "./chat/chat.routes";
 import documentsRoutes from "./documents/documents.routes";
 import { defaultLogger } from "./lib/logger";
 import authPlugin from "./plugins/auth";
@@ -79,6 +81,8 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
 
   void app.register(fastifySwaggerUI, { routePrefix: "/docs" });
 
+  void app.register(fastifySSE);
+
   app.get("/health", async () => ({ status: "ok" }));
 
   // Hidden from the spec it serves — a self-referential entry is just noise.
@@ -91,6 +95,7 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
     async (v1) => {
       await v1.register(authPlugin);
       await v1.register(documentsRoutes);
+      await v1.register(chatRoutes);
     },
     { prefix: "/v1" },
   );

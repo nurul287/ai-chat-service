@@ -1,7 +1,10 @@
+import { sql } from "drizzle-orm";
 import {
+  check,
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -91,3 +94,77 @@ export type Tenant = typeof tenants.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type Document = typeof documents.$inferSelect;
 export type Chunk = typeof chunks.$inferSelect;
+
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    externalUserId: text("external_user_id").notNull(),
+    intentSummary: text("intent_summary"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("idx_conversations_tenant_user").on(table.tenantId, table.externalUserId)],
+);
+
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    role: text().notNull().$type<"user" | "assistant">(),
+    content: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("idx_messages_conversation").on(table.conversationId, table.createdAt),
+    index("idx_messages_tenant").on(table.tenantId),
+    check("messages_role_check", sql`${table.role} in ('user', 'assistant')`),
+  ],
+);
+
+export const chatMetrics = pgTable(
+  "chat_metrics",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    modelId: text("model_id").notNull(),
+    latencyMs: integer("latency_ms").notNull(),
+    promptTokens: integer("prompt_tokens"),
+    completionTokens: integer("completion_tokens"),
+    totalTokens: integer("total_tokens"),
+    costCredits: numeric("cost_credits"),
+    toolCallCount: integer("tool_call_count").default(0).notNull(),
+    retrievedChunkCount: integer("retrieved_chunk_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("idx_chat_metrics_tenant").on(table.tenantId)],
+);
+
+export type Conversation = typeof conversations.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+export type ChatMetric = typeof chatMetrics.$inferSelect;

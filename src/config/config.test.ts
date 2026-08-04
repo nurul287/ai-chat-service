@@ -7,6 +7,7 @@ const valid = {
   VOYAGE_EMBEDDING_MODEL: "voyage-3",
   PORT: "4000",
   NODE_ENV: "test",
+  OPENROUTER_API_KEY: "or-test-key",
 };
 
 describe("parseConfig", () => {
@@ -63,5 +64,42 @@ describe("parseConfig", () => {
         /PUBLIC_URL/,
       );
     });
+  });
+});
+
+describe("chat model config", () => {
+  it("defaults to openrouter with the free deepseek model", () => {
+    const config = parseConfig({ ...valid, OPENROUTER_API_KEY: "or-test-key" });
+    expect(config.CHAT_MODEL_PROVIDER).toBe("openrouter");
+    expect(config.CHAT_MODEL_ID).toBe("deepseek/deepseek-r1:free");
+  });
+
+  it("requires OPENROUTER_API_KEY when the provider is openrouter", () => {
+    const { OPENROUTER_API_KEY: _k, ...rest } = valid;
+    expect(() => parseConfig({ ...rest, CHAT_MODEL_PROVIDER: "openrouter" })).toThrow(
+      /OPENROUTER_API_KEY/,
+    );
+  });
+
+  it("does not require OPENROUTER_API_KEY when the provider is anthropic", () => {
+    const { OPENROUTER_API_KEY: _k, ...rest } = valid;
+    const config = parseConfig({
+      ...rest,
+      CHAT_MODEL_PROVIDER: "anthropic",
+      ANTHROPIC_API_KEY: "sk-ant-test",
+    });
+    expect(config.OPENROUTER_API_KEY).toBeUndefined();
+  });
+
+  it("requires ANTHROPIC_API_KEY when the provider is anthropic", () => {
+    expect(() =>
+      parseConfig({ ...valid, CHAT_MODEL_PROVIDER: "anthropic", OPENROUTER_API_KEY: "or-key" }),
+    ).toThrow(/ANTHROPIC_API_KEY/);
+  });
+
+  it("rejects an unknown CHAT_MODEL_PROVIDER", () => {
+    expect(() =>
+      parseConfig({ ...valid, CHAT_MODEL_PROVIDER: "openai", OPENROUTER_API_KEY: "or-key" }),
+    ).toThrow(/CHAT_MODEL_PROVIDER/);
   });
 });

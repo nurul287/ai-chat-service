@@ -50,6 +50,11 @@ echo "== DELETE again -> 404 not_found =="
 curl -sS -X DELETE "${BASE_URL}/v1/documents/sku-1" "${auth[@]}"
 echo -e "\n"
 
+echo "== POST /v1/chat (streamed) =="
+curl -N -sS -X POST "${BASE_URL}/v1/chat" "${auth[@]}" "${json[@]}" \
+  -d '{"externalUserId": "curl-example-user", "message": "Do you have anything for a headache?"}'
+echo -e "\n"
+
 echo "== No key -> 401 unauthorized =="
 curl -sS -X POST "${BASE_URL}/v1/search" "${json[@]}" -d '{ "query": "anything" }'
 echo -e "\n"

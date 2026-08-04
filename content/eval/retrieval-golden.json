@@ -1,0 +1,82 @@
+{
+  "domains": {
+    "pharmacy": {
+      "documents": [
+        {
+          "externalId": "sku-1",
+          "title": "Paracetamol",
+          "content": "Paracetamol 500mg tablets. Relieves fever, headache and mild pain."
+        },
+        {
+          "externalId": "sku-2",
+          "title": "Loratadine",
+          "content": "Loratadine 10mg antihistamine tablets for hay fever and allergic rhinitis."
+        },
+        {
+          "externalId": "sku-3",
+          "title": "Sterile bandage",
+          "content": "Sterile adhesive bandages for dressing minor cuts and grazes."
+        },
+        {
+          "externalId": "sku-4",
+          "title": "Ibuprofen gel",
+          "content": "Ibuprofen 5% topical gel for localized muscle and joint pain relief."
+        },
+        {
+          "externalId": "sku-5",
+          "title": "Rehydration sachets",
+          "content": "Oral rehydration salts for fluid loss from vomiting or diarrhoea."
+        }
+      ],
+      "queries": [
+        { "query": "reduce a high temperature", "expectedExternalId": "sku-1" },
+        { "query": "my nose runs every spring", "expectedExternalId": "sku-2" },
+        { "query": "I cut my finger and it's bleeding", "expectedExternalId": "sku-3" },
+        { "query": "sore knee after running", "expectedExternalId": "sku-4" },
+        { "query": "keep fluids up after being sick", "expectedExternalId": "sku-5" },
+        { "query": "something for a pounding head", "expectedExternalId": "sku-1" },
+        { "query": "seasonal sneezing and itchy eyes", "expectedExternalId": "sku-2" },
+        { "query": "cover a small wound", "expectedExternalId": "sku-3" }
+      ]
+    },
+    "docs-site": {
+      "documents": [
+        {
+          "externalId": "faq-invite",
+          "title": "Inviting teammates",
+          "content": "To add someone to your workspace, open Settings, choose Members, and enter their email. They'll receive a link to join."
+        },
+        {
+          "externalId": "faq-export",
+          "title": "Exporting your data",
+          "content": "You can download everything in your account as a CSV or JSON archive from the Data tab under Account Settings, at any time."
+        },
+        {
+          "externalId": "faq-cancel",
+          "title": "Cancelling a subscription",
+          "content": "Cancelling stops future billing immediately, but you keep access until the end of the period you already paid for."
+        },
+        {
+          "externalId": "faq-mobile",
+          "title": "Mobile access",
+          "content": "There isn't a dedicated app yet, but the site works fully in a mobile browser, including offline drafts."
+        },
+        {
+          "externalId": "faq-password",
+          "title": "Resetting your password",
+          "content": "Use the 'forgot password' link on the sign-in page. A reset link is emailed to you and expires after one hour."
+        }
+      ],
+      "queries": [
+        { "query": "how do I add a colleague to my team", "expectedExternalId": "faq-invite" },
+        { "query": "get all my information out of the app", "expectedExternalId": "faq-export" },
+        { "query": "what happens if I stop paying", "expectedExternalId": "faq-cancel" },
+        { "query": "can I use this on my phone", "expectedExternalId": "faq-mobile" },
+        { "query": "I forgot how to sign in", "expectedExternalId": "faq-password" },
+        { "query": "will I still be billed if I quit today", "expectedExternalId": "faq-cancel" },
+        { "query": "is there a phone app to install", "expectedExternalId": "faq-mobile" },
+        { "query": "download a copy of everything", "expectedExternalId": "faq-export" }
+      ]
+    }
+  }
+}

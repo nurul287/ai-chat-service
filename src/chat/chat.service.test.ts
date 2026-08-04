@@ -168,6 +168,64 @@ describe("runChat", () => {
     expect(maybeRefreshIntentSummary).toHaveBeenCalledWith("conv-1", 3);
   });
 
+  it("does not stop the tool loop the instant search_knowledge is called, before the model can use its result", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(streamText).mockReturnValue(fakeResult([{ type: "finish", totalUsage: {} }]) as never);
+
+    const { runChat } = await import("./chat.service");
+    await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    const callArgs = vi.mocked(streamText).mock.calls[0]![0] as { stopWhen: unknown };
+    const stopConditions = Array.isArray(callArgs.stopWhen) ? callArgs.stopWhen : [callArgs.stopWhen];
+
+    // A step where the model has only just called the tool: no synthesized
+    // answer yet. None of the real stop conditions should fire here, or the
+    // loop ends before the model gets a chance to read the tool's result.
+    const stepAfterToolCallOnly = [{ toolCalls: [{ toolName: "search_knowledge" }] }];
+
+    const results = await Promise.all(
+      (stopConditions as Array<(o: { steps: unknown[] }) => boolean | PromiseLike<boolean>>).map((fn) =>
+        Promise.resolve(fn({ steps: stepAfterToolCallOnly })),
+      ),
+    );
+
+    expect(results.some(Boolean)).toBe(false);
+  });
+
+  it("builds context before persisting the current turn's message, so the sliding window never already contains it", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { buildContext } = await import("./history");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(streamText).mockReturnValue(fakeResult([{ type: "finish", totalUsage: {} }]) as never);
+
+    const { runChat } = await import("./chat.service");
+    await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    // If appendMessage("user", ...) ran first, buildContext's next real read
+    // would already include the current turn's message, and the manual
+    // append below would duplicate it.
+    const buildContextOrder = vi.mocked(buildContext).mock.invocationCallOrder[0]!;
+    const firstAppendOrder = vi.mocked(appendMessage).mock.invocationCallOrder[0]!;
+    expect(buildContextOrder).toBeLessThan(firstAppendOrder);
+
+    const callArgs = vi.mocked(streamText).mock.calls[0]![0] as {
+      messages: Array<{ role: string; content: unknown }>;
+    };
+    const currentUserMessageCount = callArgs.messages.filter(
+      (m) => m.role === "user" && m.content === "hi",
+    ).length;
+    expect(currentUserMessageCount).toBe(1);
+  });
+
   it("records metrics including OpenRouter's cost from finalStep.providerMetadata", async () => {
     const { getConversation, appendMessage } = await import("./conversations.service");
     const { recordChatMetrics } = await import("./chat-metrics.service");

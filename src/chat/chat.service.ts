@@ -1,4 +1,4 @@
-import { hasToolCall, isStepCount, streamText } from "ai";
+import { isStepCount, streamText } from "ai";
 import { config } from "../config";
 import type { RetrievedChunk } from "../retrieval/retrieve";
 import { recordChatMetrics } from "./chat-metrics.service";
@@ -46,16 +46,16 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
     ? await requireOwnedConversation(input.tenantId, input.externalUserId, input.conversationId)
     : await createConversation(input.tenantId, input.externalUserId);
 
+  const context = await buildContext(conversation.id);
+
   await appendMessage(conversation.id, input.tenantId, "user", input.message);
   const userTurnCount = await countUserMessages(conversation.id);
-
-  const context = await buildContext(conversation.id);
 
   const result = streamText({
     model: chatModel,
     messages: [...context, { role: "user", content: input.message }],
     tools: { search_knowledge: searchKnowledgeTool(input.tenantId) },
-    stopWhen: [hasToolCall("search_knowledge"), isStepCount(MAX_TOOL_LOOP_STEPS)],
+    stopWhen: isStepCount(MAX_TOOL_LOOP_STEPS),
   });
 
   let assistantText = "";

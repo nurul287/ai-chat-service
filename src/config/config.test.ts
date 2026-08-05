@@ -8,6 +8,7 @@ const valid = {
   PORT: "4000",
   NODE_ENV: "test",
   OPENROUTER_API_KEY: "or-test-key",
+  TOOL_SECRETS_ENCRYPTION_KEY: "3eafa276356c2bcb2f139410c731b4da88aeca1b487b9544fae4b712a5d5a477",
 };
 
 describe("parseConfig", () => {

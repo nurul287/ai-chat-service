@@ -47,8 +47,69 @@ describe("registerToolBody", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects a non-HTTPS endpointUrl loosely — still requires a valid URL", () => {
+  it("rejects an authHeader whose name would clobber a header the service sets itself", () => {
+    for (const name of ["Content-Type", "content-type", "X-Webhook-Signature", "x-webhook-timestamp"]) {
+      const result = registerToolBody.safeParse({
+        ...validBody,
+        authHeader: { name, value: "anything" },
+      });
+      expect(result.success, `expected ${name} to be rejected`).toBe(false);
+    }
+  });
+
+  it("rejects a string that is not a URL at all", () => {
     const result = registerToolBody.safeParse({ ...validBody, endpointUrl: "not-a-url" });
     expect(result.success).toBe(false);
+  });
+
+  it("requires https:// — a plain http:// endpoint is rejected", () => {
+    const result = registerToolBody.safeParse({
+      ...validBody,
+      endpointUrl: "http://tenant.example.com/tool",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects non-http schemes outright", () => {
+    for (const endpointUrl of ["file:///etc/passwd", "ftp://tenant.example.com/tool"]) {
+      const result = registerToolBody.safeParse({ ...validBody, endpointUrl });
+      expect(result.success, `expected ${endpointUrl} to be rejected`).toBe(false);
+    }
+  });
+
+  it("rejects an https:// URL pointed at an internal or private host", () => {
+    const internalUrls = [
+      "https://169.254.169.254/latest/meta-data/", // cloud metadata
+      "https://127.0.0.1:55322/",
+      "https://localhost/tool",
+      "https://10.0.0.1/tool",
+      "https://172.16.0.1/tool",
+      "https://192.168.1.1/tool",
+      "https://postgres.railway.internal:5432/",
+      "https://printer.local/tool",
+      "https://[::1]/tool",
+      "https://[fe80::1]/tool",
+    ];
+
+    for (const endpointUrl of internalUrls) {
+      const result = registerToolBody.safeParse({ ...validBody, endpointUrl });
+      expect(result.success, `expected ${endpointUrl} to be rejected`).toBe(false);
+    }
+  });
+
+  it("accepts a legitimate public https:// endpoint, including public IPs that merely look private", () => {
+    const publicUrls = [
+      "https://tenant.example.com/webhooks/lookup-order",
+      "https://api.tenant.example.com:8443/tool",
+      "https://100.20.30.40/tool", // not 10.x — a public address that shares a prefix
+      "https://172.32.0.1/tool", // just outside 172.16.0.0/12
+      "https://192.169.0.1/tool", // just outside 192.168.0.0/16
+      "https://8.8.8.8/tool",
+    ];
+
+    for (const endpointUrl of publicUrls) {
+      const result = registerToolBody.safeParse({ ...validBody, endpointUrl });
+      expect(result.success, `expected ${endpointUrl} to be accepted`).toBe(true);
+    }
   });
 });

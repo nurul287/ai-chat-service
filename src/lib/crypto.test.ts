@@ -24,4 +24,14 @@ describe("crypto", () => {
     const tampered = stored.slice(0, -4) + "abcd";
     expect(() => decryptSecret(tampered)).toThrow();
   });
+
+  it("round-trips an empty string through encrypt then decrypt", () => {
+    const plaintext = "";
+    const stored = encryptSecret(plaintext);
+    expect(decryptSecret(stored)).toBe(plaintext);
+  });
+
+  it("throws when the stored value is malformed (no colons)", () => {
+    expect(() => decryptSecret("not-a-valid-format")).toThrow();
+  });
 });

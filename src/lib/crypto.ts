@@ -23,10 +23,11 @@ export function encryptSecret(plaintext: string): string {
 }
 
 export function decryptSecret(stored: string): string {
-  const [ivB64, authTagB64, ciphertextB64] = stored.split(":");
-  if (!ivB64 || !authTagB64 || !ciphertextB64) {
+  const parts = stored.split(":");
+  if (parts.length !== 3) {
     throw new Error("Malformed encrypted secret: expected iv:authTag:ciphertext");
   }
+  const [ivB64, authTagB64, ciphertextB64] = parts as [string, string, string];
 
   const decipher = createDecipheriv(ALGORITHM, getKey(), Buffer.from(ivB64, "base64"));
   decipher.setAuthTag(Buffer.from(authTagB64, "base64"));

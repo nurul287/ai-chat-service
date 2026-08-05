@@ -56,8 +56,8 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
 
   const customTools = await listActiveTools(input.tenantId);
   const tools = {
-    search_knowledge: searchKnowledgeTool(input.tenantId),
     ...Object.fromEntries(customTools.map((t) => [t.name, buildCustomTool(t, conversation.id)])),
+    search_knowledge: searchKnowledgeTool(input.tenantId),
   };
 
   const result = streamText({

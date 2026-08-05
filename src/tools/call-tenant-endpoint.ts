@@ -15,18 +15,18 @@ export async function callTenantEndpoint(
   args: unknown,
   conversationId: string,
 ): Promise<TenantToolCallResult> {
-  const body = JSON.stringify({ toolName: tool.name, arguments: args, conversationId });
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = createHmac("sha256", tool.hmacSecret).update(`${timestamp}.${body}`).digest("hex");
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "X-Webhook-Timestamp": timestamp,
-    "X-Webhook-Signature": signature,
-  };
-  if (tool.authHeader) headers[tool.authHeader.name] = tool.authHeader.value;
-
   try {
+    const body = JSON.stringify({ toolName: tool.name, arguments: args, conversationId });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = createHmac("sha256", tool.hmacSecret).update(`${timestamp}.${body}`).digest("hex");
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-Webhook-Timestamp": timestamp,
+      "X-Webhook-Signature": signature,
+    };
+    if (tool.authHeader) headers[tool.authHeader.name] = tool.authHeader.value;
+
     const res = await fetch(tool.endpointUrl, {
       method: "POST",
       headers,

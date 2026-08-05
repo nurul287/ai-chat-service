@@ -123,4 +123,15 @@ describe("callTenantEndpoint", () => {
 
     expect(result.ok).toBe(false);
   });
+
+  it("degrades gracefully instead of rejecting when args cannot be JSON-serialized", async () => {
+    const tool = fakeTool();
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+
+    await expect(callTenantEndpoint(tool, circular, "conv-1")).resolves.toEqual({
+      ok: false,
+      reason: expect.any(String),
+    });
+  });
 });

@@ -39,6 +39,14 @@ export type ChatWireEvent =
 
 const MAX_TOOL_LOOP_STEPS = 4;
 
+/**
+ * Reachable when the model spends every step on tool calls and
+ * MAX_TOOL_LOOP_STEPS cuts the loop off before any reply text — rare, but a
+ * blank assistant bubble is worse than a clear "try again" and the messages
+ * table has no other guard against an empty `content`.
+ */
+const EMPTY_REPLY_FALLBACK = "I wasn't able to put together a reply for that — could you try rephrasing?";
+
 export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEvent> {
   const startedAt = Date.now();
 
@@ -91,6 +99,11 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
         };
         return;
     }
+  }
+
+  if (assistantText.trim() === "") {
+    assistantText = EMPTY_REPLY_FALLBACK;
+    yield { event: "token", data: { text: assistantText } };
   }
 
   const assistantMessage = await appendMessage(conversation.id, input.tenantId, "assistant", assistantText);

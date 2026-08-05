@@ -14,14 +14,15 @@ const jsonSchemaObject = z
     message: 'inputSchema must have "type": "object" at its root — a tool\'s parameters are always an object',
   })
   .refine(
-    (schema) => {
-      try {
-        ajv.compile(schema);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    // validateSchema checks the schema as data against the JSON-Schema
+    // meta-schema and never compiles it. compile() was tried here first, but
+    // ajv unconditionally caches every distinct schema it compiles in a
+    // plain Map that is never evicted — even schemas that fail validation —
+    // so calling it on every registration would grow unbounded per tenant.
+    // Verified against the installed ajv@8.20.0: repeated validateSchema
+    // calls on distinct schemas leave ajv's internal cache at size 1 (just
+    // the meta-schema), while compile() grows it by one per distinct schema.
+    (schema) => ajv.validateSchema(schema) === true,
     { message: "inputSchema is not a valid JSON Schema" },
   );
 

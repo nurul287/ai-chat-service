@@ -36,15 +36,28 @@ describe("adaptStream", () => {
     expect(events).toEqual([{ type: "sources", documents: [{ externalId: "sku-1" }] }]);
   });
 
-  it("ignores tool-results from any tool other than search_knowledge", async () => {
+  it("emits a tool_call event for a tool-result from any tool other than search_knowledge", async () => {
     const events = await collect(
       adaptStream(
         fakeStream([
-          { type: "tool-result", toolCallId: "c1", toolName: "some_other_tool", input: {}, output: {} },
+          {
+            type: "tool-result",
+            toolCallId: "c1",
+            toolName: "lookup_order",
+            input: { orderId: "123" },
+            output: { status: "shipped" },
+          },
         ]) as never,
       ),
     );
-    expect(events).toEqual([]);
+    expect(events).toEqual([
+      {
+        type: "tool_call",
+        toolName: "lookup_order",
+        arguments: { orderId: "123" },
+        result: { status: "shipped" },
+      },
+    ]);
   });
 
   it("emits a finish event carrying totalUsage", async () => {

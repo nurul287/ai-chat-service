@@ -31,6 +31,7 @@ export type RunChatInput = {
 export type ChatWireEvent =
   | { event: "token"; data: { text: string } }
   | { event: "sources"; data: { documents: RetrievedChunk[] } }
+  | { event: "tool_call"; data: { toolName: string; arguments: unknown; result: unknown } }
   | { event: "done"; data: { conversationId: string; messageId: string } }
   | {
       event: "error";
@@ -73,6 +74,13 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
         toolCallCount += 1;
         retrievedChunkCount += event.documents.length;
         yield { event: "sources", data: { documents: event.documents } };
+        break;
+      case "tool_call":
+        toolCallCount += 1;
+        yield {
+          event: "tool_call",
+          data: { toolName: event.toolName, arguments: event.arguments, result: event.result },
+        };
         break;
       case "finish":
         usage = event.usage;

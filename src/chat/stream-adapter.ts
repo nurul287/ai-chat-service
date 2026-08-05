@@ -4,6 +4,7 @@ import type { RetrievedChunk } from "../retrieval/retrieve";
 export type ChatStreamEvent =
   | { type: "token"; text: string }
   | { type: "sources"; documents: RetrievedChunk[] }
+  | { type: "tool_call"; toolName: string; arguments: unknown; result: unknown }
   | {
       type: "finish";
       usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -15,11 +16,10 @@ export type ChatStreamEvent =
  * events this service actually surfaces. Deliberately pure — no Fastify, no
  * database, no network — so it is testable with a fake source stream alone.
  *
- * Only `search_knowledge`'s tool-result becomes a `sources` event: this is
- * the ONLY tool this loop has in Sprint 2 (Sprint 3 adds tenant-registered
- * custom tools), and a result from any other tool name is silently ignored
- * rather than surfaced, since there is nothing else registered to produce one
- * yet.
+ * `search_knowledge`'s tool-result becomes a `sources` event; every other
+ * tool's result becomes a `tool_call` event — that's how a tenant's custom
+ * tool (Sprint 3) becomes visible to the client, the same transparency
+ * principle as search_knowledge's citations.
  */
 export async function* adaptStream(
   source: AsyncIterable<TextStreamPart<ToolSet>>,
@@ -32,6 +32,8 @@ export async function* adaptStream(
       case "tool-result":
         if (part.toolName === "search_knowledge") {
           yield { type: "sources", documents: part.output as RetrievedChunk[] };
+        } else {
+          yield { type: "tool_call", toolName: part.toolName, arguments: part.input, result: part.output };
         }
         break;
       case "finish":

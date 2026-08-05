@@ -125,6 +125,35 @@ describe("runChat", () => {
     });
   });
 
+  it("yields a tool_call event for a non-search_knowledge tool result", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(streamText).mockReturnValue(
+      fakeResult([
+        {
+          type: "tool-result",
+          toolCallId: "c1",
+          toolName: "lookup_order",
+          input: { orderId: "123" },
+          output: { status: "shipped" },
+        },
+        { type: "finish", totalUsage: {} },
+      ]) as never,
+    );
+
+    const { runChat } = await import("./chat.service");
+    const events = await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    expect(events).toContainEqual({
+      event: "tool_call",
+      data: { toolName: "lookup_order", arguments: { orderId: "123" }, result: { status: "shipped" } },
+    });
+  });
+
   it("yields an error event and does NOT persist an assistant message when the stream errors", async () => {
     const { getConversation, appendMessage } = await import("./conversations.service");
     const { streamText } = await import("ai");

@@ -12,7 +12,9 @@ import { buildContext } from "./history";
 import { maybeRefreshIntentSummary } from "./intent-summary";
 import { chatModel } from "./model";
 import { adaptStream } from "./stream-adapter";
+import { buildCustomTool } from "./tools/custom-tool";
 import { searchKnowledgeTool } from "./tools/search-knowledge";
+import { listActiveTools } from "../tools/tenant-tools.service";
 
 export class ConversationNotFoundError extends Error {
   constructor() {
@@ -52,10 +54,16 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
   await appendMessage(conversation.id, input.tenantId, "user", input.message);
   const userTurnCount = await countUserMessages(conversation.id);
 
+  const customTools = await listActiveTools(input.tenantId);
+  const tools = {
+    search_knowledge: searchKnowledgeTool(input.tenantId),
+    ...Object.fromEntries(customTools.map((t) => [t.name, buildCustomTool(t, conversation.id)])),
+  };
+
   const result = streamText({
     model: chatModel,
     messages: [...context, { role: "user", content: input.message }],
-    tools: { search_knowledge: searchKnowledgeTool(input.tenantId) },
+    tools,
     stopWhen: isStepCount(MAX_TOOL_LOOP_STEPS),
   });
 

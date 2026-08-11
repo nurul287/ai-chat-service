@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "../db";
 import { tenants, tenantTools } from "../db/schema";
 import { createTenant } from "../tenants/tenants.service";
@@ -109,6 +110,32 @@ describe("listActiveTools", () => {
     const [active] = await listActiveTools(tenant.id);
     expect(active!.authHeader).toBeNull();
   });
+
+  it("skips a row whose secret will not decrypt instead of failing the whole tenant's chat", async () => {
+    const tenant = await createTenant({ name: "Acme", slug: "acme" });
+    const broken = await registerTool(tenant.id, { ...input, name: "broken_tool" });
+    await registerTool(tenant.id, { ...input, name: "good_tool" });
+
+    // Exactly what a rotated encryption key or a corrupted column looks like
+    // to decryptSecret: a value it cannot read back.
+    await db
+      .update(tenantTools)
+      .set({ hmacSecretEncrypted: "not-a-real-ciphertext" })
+      .where(eq(tenantTools.id, broken.id));
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const active = await listActiveTools(tenant.id);
+
+      expect(active.map((t) => t.name)).toEqual(["good_tool"]);
+      // The warning names the tool, and never leaks the stored ciphertext.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain(broken.id);
+      expect(String(warn.mock.calls[0]![0])).not.toContain("not-a-real-ciphertext");
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });
 
 describe("revokeTool", () => {
@@ -123,5 +150,21 @@ describe("revokeTool", () => {
     await registerTool(a.id, input);
 
     expect(await revokeTool(b.id, input.name)).toBe(false);
+  });
+
+  it("bumps updatedAt, like every other row mutation in this codebase", async () => {
+    const tenant = await createTenant({ name: "Acme", slug: "acme" });
+    const registered = await registerTool(tenant.id, input);
+
+    const before = (await db.select().from(tenantTools).where(eq(tenantTools.id, registered.id)))[0]!;
+    const revokedAt = Date.now();
+    await revokeTool(tenant.id, registered.name);
+    const after = (await db.select().from(tenantTools).where(eq(tenantTools.id, registered.id)))[0]!;
+
+    expect(after.updatedAt).not.toBe(before.updatedAt);
+    // Not an ordering assertion against `before`: that value came from the
+    // database's own defaultNow() while revokeTool stamps the Node clock, and
+    // the two are skewed by a few ms. Anchoring to the Node clock instead.
+    expect(Math.abs(Date.parse(after.updatedAt) - revokedAt)).toBeLessThan(5000);
   });
 });

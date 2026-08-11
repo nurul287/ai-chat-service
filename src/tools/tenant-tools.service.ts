@@ -119,24 +119,42 @@ export async function listActiveTools(tenantId: string): Promise<ActiveTool[]> {
     .from(tenantTools)
     .where(and(eq(tenantTools.tenantId, tenantId), isNull(tenantTools.revokedAt)));
 
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    description: row.description,
-    inputSchema: row.inputSchema as Record<string, unknown>,
-    endpointUrl: row.endpointUrl,
-    hmacSecret: decryptSecret(row.hmacSecretEncrypted),
-    authHeader:
-      row.authHeaderName && row.authHeaderValueEncrypted
-        ? { name: row.authHeaderName, value: decryptSecret(row.authHeaderValueEncrypted) }
-        : null,
-  }));
+  // flatMap, not map: a single row whose secret will not decrypt (corrupted
+  // column, rotated encryption key, hand-edited data) must not take down chat
+  // for every conversation this tenant has. runChat calls this before
+  // streamText and outside any try/catch, so a throw here turns every chat
+  // turn — including ones that never touch a custom tool — into a bare 500
+  // with no SSE stream, after the user's message has already been persisted.
+  return rows.flatMap((row) => {
+    try {
+      return [
+        {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          inputSchema: row.inputSchema as Record<string, unknown>,
+          endpointUrl: row.endpointUrl,
+          hmacSecret: decryptSecret(row.hmacSecretEncrypted),
+          authHeader:
+            row.authHeaderName && row.authHeaderValueEncrypted
+              ? { name: row.authHeaderName, value: decryptSecret(row.authHeaderValueEncrypted) }
+              : null,
+        },
+      ];
+    } catch {
+      // Identifiers only — never the ciphertext, never a decrypted value.
+      console.warn(
+        `[tenant-tools] skipping tool with undecryptable secret (toolId=${row.id} tenantId=${tenantId})`,
+      );
+      return [];
+    }
+  });
 }
 
 export async function revokeTool(tenantId: string, name: string): Promise<boolean> {
   const revoked = await db
     .update(tenantTools)
-    .set({ revokedAt: new Date().toISOString() })
+    .set({ revokedAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
     .where(and(eq(tenantTools.tenantId, tenantId), eq(tenantTools.name, name), isNull(tenantTools.revokedAt)))
     .returning({ id: tenantTools.id });
   return revoked.length > 0;

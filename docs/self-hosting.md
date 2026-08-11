@@ -23,10 +23,33 @@
 | `CHAT_MODEL_ID`         | no          | `deepseek/deepseek-r1:free` | See the delisting runbook below                |
 | `OPENROUTER_API_KEY`    | conditional | —            | Required when `CHAT_MODEL_PROVIDER=openrouter` (the default) |
 | `ANTHROPIC_API_KEY`     | conditional | —            | Required when `CHAT_MODEL_PROVIDER=anthropic`                |
+| `TOOL_SECRETS_ENCRYPTION_KEY` | yes   | —            | **64 hex characters (32 bytes).** Encrypts custom-tool secrets at rest — see below |
 
 Configuration is validated by Zod at import time, so a missing or malformed
 variable crashes the process at boot with the variable's name — never as an
 `undefined` surprise on a live request.
+
+### `TOOL_SECRETS_ENCRYPTION_KEY`
+
+Required at boot, with no default — the service will not start without it.
+It is the AES-256-GCM key for per-tenant custom-tool secrets (each tool's
+HMAC signing secret and its optional static auth header value). Unlike API
+keys, those must be readable back to sign an outgoing request, so they are
+encrypted rather than hashed.
+
+Generate one:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+> **Back this up, and do not rotate it casually.** Changing it makes every
+> already-stored tool secret **permanently undecryptable** — there is no
+> re-encryption path. Tools whose secrets can no longer be read are skipped
+> at chat time (chat itself keeps working; those tools simply disappear from
+> the model's toolset), and recovering means revoking and re-registering each
+> affected tool — which issues a new `hmacSecret` that the tenant then has to
+> deploy to their own endpoint.
 
 > **Changing the embedding model is a migration, not a config change.** The
 > `embedding` column is `vector(1024)`, fixed to `voyage-3`. A model with a
@@ -226,6 +249,8 @@ existing project. Point it at this GitHub repo and set these service variables:
 | ---------------- | ----------------------------------------- |
 | `DATABASE_URL`   | Your Supabase connection string           |
 | `VOYAGE_API_KEY` | Your Voyage key                           |
+| `OPENROUTER_API_KEY` | Your OpenRouter key (the default chat provider) |
+| `TOOL_SECRETS_ENCRYPTION_KEY` | 64 hex characters — generate as above, and back it up |
 | `NODE_ENV`       | `production`                              |
 | `PUBLIC_URL`     | The Railway public domain, once generated |
 

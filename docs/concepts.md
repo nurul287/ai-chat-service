@@ -94,3 +94,10 @@ The assistant can call `search_knowledge` mid-reply — the same retrieval
 `POST /v1/search` exposes directly, with a reranking pass added on top. What
 it found is returned as a `sources` event, so you can show citations without
 re-querying separately.
+
+It can also call any [custom tool](custom-tools.md) you have registered —
+your own HTTPS endpoint, for the data ingestion can't cover. Those come back
+as a `tool_call` event carrying the tool's name, the arguments the model
+passed, and the endpoint's raw result, on the same principle: a client should
+be able to show *why* the assistant answered as it did. Note that this makes
+your endpoint's response body visible to whoever is viewing the conversation.

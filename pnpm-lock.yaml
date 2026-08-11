@@ -35,6 +35,9 @@ importers:
       ai:
         specifier: 7.0.48
         version: 7.0.48(zod@4.4.3)
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       dotenv:
         specifier: ^17.4.2
         version: 17.4.2

@@ -37,7 +37,8 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         tags: ["Chat"],
         summary: "Send a message and receive a streamed reply",
         description:
-          "Streams the reply over Server-Sent Events (token, sources, done, error). " +
+          "Streams the reply over Server-Sent Events (token, sources, tool_call, done, error). " +
+          "`tool_call` carries a custom tool's name, arguments and raw result — see docs/custom-tools.md. " +
           "A conversationId that does not belong to the caller returns a plain 404 " +
           "BEFORE the stream starts. A failure mid-stream is an `error` SSE event " +
           "instead, since the HTTP status can no longer change once streaming has " +

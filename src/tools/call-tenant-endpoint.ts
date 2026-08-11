@@ -1,0 +1,82 @@
+import { createHmac } from "node:crypto";
+import type { ActiveTool } from "./tenant-tools.service";
+
+const TIMEOUT_MS = 5000;
+
+/**
+ * A tool result is meant to be a small JSON payload the model can reason
+ * about, not a bulk export. Without a cap, res.json() buffers whatever the
+ * tenant's endpoint sends straight into this process's memory.
+ *
+ * Best-effort: this trusts the advertised content-length, so a chunked
+ * response that sends no such header still gets buffered. The 5s timeout is
+ * the backstop there.
+ */
+const MAX_RESPONSE_BYTES = 1_000_000;
+
+export type TenantToolCallResult = { ok: true; data: unknown } | { ok: false; reason: string };
+
+/**
+ * Never throws. A tenant's endpoint being slow, down, or erroring is an
+ * expected, ordinary outcome — not a service-level failure — so it always
+ * resolves to a result the chat turn can react to and finish cleanly.
+ */
+export async function callTenantEndpoint(
+  tool: ActiveTool,
+  args: unknown,
+  conversationId: string,
+): Promise<TenantToolCallResult> {
+  try {
+    const body = JSON.stringify({ toolName: tool.name, arguments: args, conversationId });
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = createHmac("sha256", tool.hmacSecret).update(`${timestamp}.${body}`).digest("hex");
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-Webhook-Timestamp": timestamp,
+      "X-Webhook-Signature": signature,
+    };
+    if (tool.authHeader) headers[tool.authHeader.name] = tool.authHeader.value;
+
+    const res = await fetch(tool.endpointUrl, {
+      method: "POST",
+      headers,
+      body,
+      // fetch defaults to "follow". endpointUrl is validated once, at
+      // registration — a tenant could otherwise register a perfectly public
+      // https:// endpoint and have it 302 to 169.254.169.254 at call time,
+      // with the internal response streamed back through the tool_call event
+      // as if it were their own. Not following is the only place that check
+      // can be enforced for the address actually connected to.
+      redirect: "manual",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+
+    // Two shapes to handle: the fetch spec says "manual" yields an
+    // opaque-redirect filtered response (status 0, type "opaqueredirect"),
+    // but node v24.16.0's undici was verified to surface the real redirect
+    // instead (status 302, type "basic", Location intact). Either way the
+    // redirect is not followed; this turns both into an ordinary failed call.
+    if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+      // Release the socket rather than leaving an unread body to GC.
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, reason: "Tool endpoint redirected; redirects are not followed" };
+    }
+
+    if (!res.ok) {
+      return { ok: false, reason: `Tool endpoint responded with status ${res.status}` };
+    }
+
+    // Number(null) is 0, so an absent header simply falls through.
+    const contentLength = Number(res.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+      // Release the socket rather than leaving an unread body to GC.
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, reason: `Tool endpoint response exceeded ${MAX_RESPONSE_BYTES} bytes` };
+    }
+
+    return { ok: true, data: await res.json() };
+  } catch {
+    return { ok: false, reason: "Tool endpoint did not respond in time or the request failed" };
+  }
+}

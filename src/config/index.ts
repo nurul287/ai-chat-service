@@ -28,6 +28,13 @@ const baseConfigSchema = z.object({
   CHAT_MODEL_ID: z.string().default("deepseek/deepseek-r1:free"),
   OPENROUTER_API_KEY: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
+  // AES-256-GCM key for tenant tool secrets (the HMAC secret and optional
+  // auth header value) — these must be readable back to sign/authenticate
+  // outgoing requests, unlike api_keys.key_hash which only ever needs
+  // one-way comparison. 64 hex characters = 32 bytes.
+  TOOL_SECRETS_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[0-9a-f]{64}$/i, "must be a 64-character hex string (32 bytes)"),
 });
 
 const configSchema = baseConfigSchema.superRefine((data, ctx) => {

@@ -20,6 +20,7 @@ import chatRoutes from "./chat/chat.routes";
 import documentsRoutes from "./documents/documents.routes";
 import { defaultLogger } from "./lib/logger";
 import authPlugin from "./plugins/auth";
+import toolsRoutes from "./tools/tools.routes";
 
 /**
  * A factory rather than a module-level singleton: it keeps `inject()` clean in
@@ -96,6 +97,7 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
       await v1.register(authPlugin);
       await v1.register(documentsRoutes);
       await v1.register(chatRoutes);
+      await v1.register(toolsRoutes);
     },
     { prefix: "/v1" },
   );

@@ -9,6 +9,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
@@ -168,3 +169,38 @@ export const chatMetrics = pgTable(
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type ChatMetric = typeof chatMetrics.$inferSelect;
+
+export const tenantTools = pgTable(
+  "tenant_tools",
+  {
+    id: uuid().defaultRandom().primaryKey().notNull(),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    name: text().notNull(),
+    description: text().notNull(),
+    inputSchema: jsonb("input_schema").notNull(),
+    endpointUrl: text("endpoint_url").notNull(),
+    hmacSecretEncrypted: text("hmac_secret_encrypted").notNull(),
+    authHeaderName: text("auth_header_name"),
+    authHeaderValueEncrypted: text("auth_header_value_encrypted"),
+    revokedAt: timestamp("revoked_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("idx_tenant_tools_tenant").on(table.tenantId),
+    // Partial unique index, not a table-level unique() constraint — unique()
+    // has no .where(), and a revoked tool must not block re-registering the
+    // same name. Verified against drizzle-orm/pg-core/indexes.d.ts.
+    uniqueIndex("idx_tenant_tools_tenant_name_active")
+      .on(table.tenantId, table.name)
+      .where(sql`${table.revokedAt} is null`),
+  ],
+);
+
+export type TenantTool = typeof tenantTools.$inferSelect;

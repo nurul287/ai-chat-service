@@ -17,6 +17,7 @@ vi.mock("./conversations.service", () => ({
 vi.mock("./intent-summary", () => ({ maybeRefreshIntentSummary: vi.fn() }));
 vi.mock("./history", () => ({ buildContext: vi.fn(async () => []) }));
 vi.mock("./chat-metrics.service", () => ({ recordChatMetrics: vi.fn() }));
+vi.mock("../tools/tenant-tools.service", () => ({ listActiveTools: vi.fn(async () => []) }));
 
 async function collect<T>(gen: AsyncGenerator<T>): Promise<T[]> {
   const out: T[] = [];
@@ -122,6 +123,35 @@ describe("runChat", () => {
     expect(events).toContainEqual({
       event: "sources",
       data: { documents: [{ externalId: "sku-1" }, { externalId: "sku-2" }] },
+    });
+  });
+
+  it("yields a tool_call event for a non-search_knowledge tool result", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(streamText).mockReturnValue(
+      fakeResult([
+        {
+          type: "tool-result",
+          toolCallId: "c1",
+          toolName: "lookup_order",
+          input: { orderId: "123" },
+          output: { status: "shipped" },
+        },
+        { type: "finish", totalUsage: {} },
+      ]) as never,
+    );
+
+    const { runChat } = await import("./chat.service");
+    const events = await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    expect(events).toContainEqual({
+      event: "tool_call",
+      data: { toolName: "lookup_order", arguments: { orderId: "123" }, result: { status: "shipped" } },
     });
   });
 
@@ -269,5 +299,107 @@ describe("runChat", () => {
     await vi.waitFor(() =>
       expect(recordChatMetrics).toHaveBeenCalledWith(expect.objectContaining({ costCredits: null })),
     );
+  });
+
+  it("includes a tenant's registered custom tools alongside search_knowledge in the same turn", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { listActiveTools } = await import("../tools/tenant-tools.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(listActiveTools).mockResolvedValue([
+      {
+        id: "tool-1",
+        name: "lookup_order",
+        description: "Looks up an order",
+        inputSchema: { type: "object", properties: { orderId: { type: "string" } } },
+        endpointUrl: "https://tenant.example.com/tool",
+        hmacSecret: "whsec_x",
+        authHeader: null,
+      },
+    ] as never);
+    vi.mocked(streamText).mockReturnValue(fakeResult([{ type: "finish", totalUsage: {} }]) as never);
+
+    const { runChat } = await import("./chat.service");
+    await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    const callArgs = vi.mocked(streamText).mock.calls[0]![0] as { tools: Record<string, unknown> };
+    expect(Object.keys(callArgs.tools)).toEqual(
+      expect.arrayContaining(["search_knowledge", "lookup_order"]),
+    );
+  });
+
+  it("still reaches done when a custom tool's execute resolves to a failure shape", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { listActiveTools } = await import("../tools/tenant-tools.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(listActiveTools).mockResolvedValue([
+      {
+        id: "tool-1",
+        name: "lookup_order",
+        description: "Looks up an order",
+        inputSchema: { type: "object", properties: { orderId: { type: "string" } } },
+        endpointUrl: "https://tenant.example.com/tool",
+        hmacSecret: "whsec_x",
+        authHeader: null,
+      },
+    ] as never);
+    // callTenantEndpoint never throws, so a dead tenant endpoint reaches the
+    // loop as ordinary data: the exact { error } shape custom-tool.ts maps a
+    // failed call to. The turn must carry on and finish, not abort.
+    vi.mocked(streamText).mockReturnValue(
+      fakeResult([
+        {
+          type: "tool-result",
+          toolCallId: "c1",
+          toolName: "lookup_order",
+          input: { orderId: "123" },
+          output: { error: "Tool endpoint responded with status 500" },
+        },
+        { type: "text-delta", id: "1", text: "Sorry, I can't reach that system right now." },
+        { type: "finish", totalUsage: {} },
+      ]) as never,
+    );
+
+    const { runChat } = await import("./chat.service");
+    const events = await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    expect(events).toContainEqual({
+      event: "tool_call",
+      data: {
+        toolName: "lookup_order",
+        arguments: { orderId: "123" },
+        result: { error: "Tool endpoint responded with status 500" },
+      },
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({ event: "error" }));
+    expect(events.at(-1)).toEqual({
+      event: "done",
+      data: { conversationId: "conv-1", messageId: "msg-1" },
+    });
+  });
+
+  it("does not include a revoked or another tenant's tool", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { listActiveTools } = await import("../tools/tenant-tools.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(listActiveTools).mockResolvedValue([]); // the service itself already excludes these
+    vi.mocked(streamText).mockReturnValue(fakeResult([{ type: "finish", totalUsage: {} }]) as never);
+
+    const { runChat } = await import("./chat.service");
+    await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    const callArgs = vi.mocked(streamText).mock.calls[0]![0] as { tools: Record<string, unknown> };
+    expect(Object.keys(callArgs.tools)).toEqual(["search_knowledge"]);
   });
 });

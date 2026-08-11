@@ -12,7 +12,9 @@ import { buildContext } from "./history";
 import { maybeRefreshIntentSummary } from "./intent-summary";
 import { chatModel } from "./model";
 import { adaptStream } from "./stream-adapter";
+import { buildCustomTool } from "./tools/custom-tool";
 import { searchKnowledgeTool } from "./tools/search-knowledge";
+import { listActiveTools } from "../tools/tenant-tools.service";
 
 export class ConversationNotFoundError extends Error {
   constructor() {
@@ -31,6 +33,7 @@ export type RunChatInput = {
 export type ChatWireEvent =
   | { event: "token"; data: { text: string } }
   | { event: "sources"; data: { documents: RetrievedChunk[] } }
+  | { event: "tool_call"; data: { toolName: string; arguments: unknown; result: unknown } }
   | { event: "done"; data: { conversationId: string; messageId: string } }
   | {
       event: "error";
@@ -51,10 +54,16 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
   await appendMessage(conversation.id, input.tenantId, "user", input.message);
   const userTurnCount = await countUserMessages(conversation.id);
 
+  const customTools = await listActiveTools(input.tenantId);
+  const tools = {
+    ...Object.fromEntries(customTools.map((t) => [t.name, buildCustomTool(t, conversation.id)])),
+    search_knowledge: searchKnowledgeTool(input.tenantId),
+  };
+
   const result = streamText({
     model: chatModel,
     messages: [...context, { role: "user", content: input.message }],
-    tools: { search_knowledge: searchKnowledgeTool(input.tenantId) },
+    tools,
     stopWhen: isStepCount(MAX_TOOL_LOOP_STEPS),
   });
 
@@ -73,6 +82,13 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
         toolCallCount += 1;
         retrievedChunkCount += event.documents.length;
         yield { event: "sources", data: { documents: event.documents } };
+        break;
+      case "tool_call":
+        toolCallCount += 1;
+        yield {
+          event: "tool_call",
+          data: { toolName: event.toolName, arguments: event.arguments, result: event.result },
+        };
         break;
       case "finish":
         usage = event.usage;

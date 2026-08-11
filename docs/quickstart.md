@@ -139,6 +139,11 @@ event: done
 data: {"conversationId":"...","messageId":"..."}
 ```
 
+The stream carries five event types: `token`, `sources`, `tool_call`, `done`
+and `error`. `tool_call` only shows up once you have registered a
+[custom tool](custom-tools.md) and the model calls it — it carries that
+tool's name, the arguments the model passed, and your endpoint's raw result.
+
 The response has no `conversationId` in the request above — the `done` event
 is how you learn the one that was created. Send it back on the next call to
 continue the same thread:

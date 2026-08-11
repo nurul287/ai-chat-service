@@ -3,6 +3,17 @@ import type { ActiveTool } from "./tenant-tools.service";
 
 const TIMEOUT_MS = 5000;
 
+/**
+ * A tool result is meant to be a small JSON payload the model can reason
+ * about, not a bulk export. Without a cap, res.json() buffers whatever the
+ * tenant's endpoint sends straight into this process's memory.
+ *
+ * Best-effort: this trusts the advertised content-length, so a chunked
+ * response that sends no such header still gets buffered. The 5s timeout is
+ * the backstop there.
+ */
+const MAX_RESPONSE_BYTES = 1_000_000;
+
 export type TenantToolCallResult = { ok: true; data: unknown } | { ok: false; reason: string };
 
 /**
@@ -36,6 +47,14 @@ export async function callTenantEndpoint(
 
     if (!res.ok) {
       return { ok: false, reason: `Tool endpoint responded with status ${res.status}` };
+    }
+
+    // Number(null) is 0, so an absent header simply falls through.
+    const contentLength = Number(res.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
+      // Release the socket rather than leaving an unread body to GC.
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, reason: `Tool endpoint response exceeded ${MAX_RESPONSE_BYTES} bytes` };
     }
 
     return { ok: true, data: await res.json() };

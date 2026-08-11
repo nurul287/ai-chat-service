@@ -28,7 +28,12 @@ function listen(server: Server): Promise<number> {
 let server: Server | undefined;
 
 afterEach(async () => {
-  if (server) await new Promise<void>((resolve) => server!.close(() => resolve()));
+  if (server) {
+    // A test that deliberately leaves a response body unread (the size-cap
+    // one) can leave a keep-alive socket open, and close() alone waits on it.
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server!.close(() => resolve()));
+  }
   server = undefined;
 });
 
@@ -122,6 +127,42 @@ describe("callTenantEndpoint", () => {
     const result = await callTenantEndpoint(tool, {}, "conv-1");
 
     expect(result.ok).toBe(false);
+  });
+
+  it("rejects an oversized response instead of buffering it into memory", async () => {
+    // A real body matching the advertised length, so this is a well-formed
+    // HTTP response that is simply too big — not a malformed one.
+    const oversized = JSON.stringify({ blob: "x".repeat(1_100_000) });
+    server = createServer((_req, res) => {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(oversized),
+      });
+      res.end(oversized);
+    });
+    const port = await listen(server);
+
+    const tool = fakeTool({ endpointUrl: `http://127.0.0.1:${port}` });
+    const result = await callTenantEndpoint(tool, {}, "conv-1");
+
+    expect(result).toEqual({ ok: false, reason: expect.stringContaining("exceeded") });
+  });
+
+  it("still accepts a normal-sized response that advertises a content-length", async () => {
+    const body = JSON.stringify({ status: "shipped" });
+    server = createServer((_req, res) => {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(body),
+      });
+      res.end(body);
+    });
+    const port = await listen(server);
+
+    const tool = fakeTool({ endpointUrl: `http://127.0.0.1:${port}` });
+    const result = await callTenantEndpoint(tool, {}, "conv-1");
+
+    expect(result).toEqual({ ok: true, data: { status: "shipped" } });
   });
 
   it("degrades gracefully instead of rejecting when args cannot be JSON-serialized", async () => {

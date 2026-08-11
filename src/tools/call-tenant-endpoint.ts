@@ -42,8 +42,26 @@ export async function callTenantEndpoint(
       method: "POST",
       headers,
       body,
+      // fetch defaults to "follow". endpointUrl is validated once, at
+      // registration — a tenant could otherwise register a perfectly public
+      // https:// endpoint and have it 302 to 169.254.169.254 at call time,
+      // with the internal response streamed back through the tool_call event
+      // as if it were their own. Not following is the only place that check
+      // can be enforced for the address actually connected to.
+      redirect: "manual",
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+
+    // Two shapes to handle: the fetch spec says "manual" yields an
+    // opaque-redirect filtered response (status 0, type "opaqueredirect"),
+    // but node v24.16.0's undici was verified to surface the real redirect
+    // instead (status 302, type "basic", Location intact). Either way the
+    // redirect is not followed; this turns both into an ordinary failed call.
+    if (res.type === "opaqueredirect" || (res.status >= 300 && res.status < 400)) {
+      // Release the socket rather than leaving an unread body to GC.
+      await res.body?.cancel().catch(() => {});
+      return { ok: false, reason: "Tool endpoint redirected; redirects are not followed" };
+    }
 
     if (!res.ok) {
       return { ok: false, reason: `Tool endpoint responded with status ${res.status}` };

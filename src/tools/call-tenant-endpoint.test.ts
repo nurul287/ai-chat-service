@@ -165,6 +165,42 @@ describe("callTenantEndpoint", () => {
     expect(result).toEqual({ ok: true, data: { status: "shipped" } });
   });
 
+  it("does not follow a redirect, so a public endpoint cannot bounce the call to an internal one", async () => {
+    // The attack this closes: endpointUrl is validated once, at registration.
+    // A tenant registers a genuinely public https:// endpoint (server A), then
+    // has it 302 to an internal address (server B) at call time. With fetch's
+    // default redirect: "follow", B's response streams back through the
+    // tool_call event as if it were A's own.
+    let internalServerReached = false;
+
+    const internal = createServer((_req, res) => {
+      internalServerReached = true;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ awsAccessKeyId: "AKIA_SHOULD_NEVER_BE_READ" }));
+    });
+    const internalPort = await listen(internal);
+
+    try {
+      server = createServer((_req, res) => {
+        res.writeHead(302, { Location: `http://127.0.0.1:${internalPort}/latest/meta-data/` });
+        res.end();
+      });
+      const port = await listen(server);
+
+      const tool = fakeTool({ endpointUrl: `http://127.0.0.1:${port}` });
+      const result = await callTenantEndpoint(tool, {}, "conv-1");
+
+      expect(result).toEqual({ ok: false, reason: expect.stringContaining("redirect") });
+
+      // The result alone is not the security property — this is. The internal
+      // server must never have been contacted at all.
+      expect(internalServerReached).toBe(false);
+    } finally {
+      internal.closeAllConnections();
+      await new Promise<void>((resolve) => internal.close(() => resolve()));
+    }
+  });
+
   it("degrades gracefully instead of rejecting when args cannot be JSON-serialized", async () => {
     const tool = fakeTool();
     const circular: Record<string, unknown> = {};

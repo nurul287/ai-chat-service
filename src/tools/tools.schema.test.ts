@@ -97,6 +97,25 @@ describe("registerToolBody", () => {
     }
   });
 
+  it("rejects an https:// URL whose IPv6 literal embeds an internal IPv4 address", () => {
+    // The full Zod path, not the isolated helper: this is what a real
+    // registration request goes through. `new URL()` normalises the dotted
+    // quad away (`[::ffff:169.254.169.254]` -> `[::ffff:a9fe:a9fe]`), so a
+    // string-level check on the source text never fires here.
+    const embeddedUrls = [
+      "https://[::ffff:169.254.169.254]/latest/meta-data/", // IPv4-mapped cloud metadata
+      "https://[::ffff:127.0.0.1]/tool", // IPv4-mapped loopback
+      "https://[::ffff:10.0.0.1]/tool", // IPv4-mapped private range
+      "https://[::169.254.169.254]/tool", // deprecated IPv4-compatible form
+      "https://[64:ff9b::169.254.169.254]/tool", // NAT64 well-known prefix
+    ];
+
+    for (const endpointUrl of embeddedUrls) {
+      const result = registerToolBody.safeParse({ ...validBody, endpointUrl });
+      expect(result.success, `expected ${endpointUrl} to be rejected`).toBe(false);
+    }
+  });
+
   it("accepts a legitimate public https:// endpoint, including public IPs that merely look private", () => {
     const publicUrls = [
       "https://tenant.example.com/webhooks/lookup-order",
@@ -105,6 +124,8 @@ describe("registerToolBody", () => {
       "https://172.32.0.1/tool", // just outside 172.16.0.0/12
       "https://192.169.0.1/tool", // just outside 192.168.0.0/16
       "https://8.8.8.8/tool",
+      "https://[2001:4860:4860::8888]/tool", // a genuine public IPv6
+      "https://[::ffff:8.8.8.8]/tool", // IPv4-mapped, but the embedded address is public
     ];
 
     for (const endpointUrl of publicUrls) {

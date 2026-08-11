@@ -31,6 +31,40 @@ describe("isDisallowedHost", () => {
     expect(isDisallowedHost(hostname)).toBe(true);
   });
 
+  // `new URL()` normalises the dotted quad in an IPv4-embedding literal into
+  // two hex groups before isDisallowedHost ever sees it, so these — not the
+  // dotted source text above — are the hostnames a real registration actually
+  // produces. Each was captured from `new URL(...).hostname` on node v24.16.0
+  // and is asserted below to still be what the parser emits.
+  it.each([
+    ["https://[::ffff:169.254.169.254]/", "[::ffff:a9fe:a9fe]", "IPv4-mapped cloud metadata"],
+    ["https://[::ffff:127.0.0.1]/", "[::ffff:7f00:1]", "IPv4-mapped loopback"],
+    ["https://[::ffff:10.0.0.1]/", "[::ffff:a00:1]", "IPv4-mapped 10.0.0.0/8"],
+    ["https://[::ffff:172.16.0.1]/", "[::ffff:ac10:1]", "IPv4-mapped 172.16.0.0/12"],
+    ["https://[::ffff:192.168.1.1]/", "[::ffff:c0a8:101]", "IPv4-mapped 192.168.0.0/16"],
+    ["https://[::ffff:0.0.0.0]/", "[::ffff:0:0]", "IPv4-mapped unspecified"],
+    ["https://[::169.254.169.254]/", "[::a9fe:a9fe]", "IPv4-compatible cloud metadata"],
+    ["https://[::127.0.0.1]/", "[::7f00:1]", "IPv4-compatible loopback"],
+    ["https://[64:ff9b::169.254.169.254]/", "[64:ff9b::a9fe:a9fe]", "NAT64-embedded cloud metadata"],
+    ["https://[64:ff9b::7f00:1]/", "[64:ff9b::7f00:1]", "NAT64-embedded loopback"],
+  ])("rejects %s, which URL normalises to %s (%s)", (url, normalized) => {
+    expect(new URL(url).hostname).toBe(normalized);
+    expect(isDisallowedHost(normalized)).toBe(true);
+    expect(isAllowedEndpointUrl(url)).toBe(false);
+  });
+
+  // The same prefixes carrying a *public* IPv4 must still go through — the
+  // check is on the embedded address's range, not on the prefix itself.
+  it.each([
+    ["https://[::ffff:8.8.8.8]/", "[::ffff:808:808]", "IPv4-mapped public DNS"],
+    ["https://[64:ff9b::8.8.8.8]/", "[64:ff9b::808:808]", "NAT64-embedded public DNS"],
+    ["https://[2001:4860:4860::8888]/", "[2001:4860:4860::8888]", "a genuine public IPv6"],
+  ])("allows %s, which URL normalises to %s (%s)", (url, normalized) => {
+    expect(new URL(url).hostname).toBe(normalized);
+    expect(isDisallowedHost(normalized)).toBe(false);
+    expect(isAllowedEndpointUrl(url)).toBe(true);
+  });
+
   it.each([
     ["tenant.example.com", "an ordinary public hostname"],
     ["api.tenant.example.com", "a public subdomain"],

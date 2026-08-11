@@ -70,12 +70,53 @@ function expandIpv6(address: string): number[] | null {
   return [...head, ...Array<number>(missing).fill(0), ...tail];
 }
 
+/**
+ * The IPv4 destination carried in the last two groups of an IPv6 address that
+ * uses a known IPv4-embedding prefix, or null when the address embeds no IPv4.
+ *
+ * This works off the *numeric groups*, not the source text, because
+ * `new URL(...)` normalises the dotted-decimal tail away before any of this
+ * code sees the hostname: `new URL("https://[::ffff:169.254.169.254]/")
+ * .hostname` is `[::ffff:a9fe:a9fe]` (verified on node v24.16.0). A
+ * string-level search for a dotted quad therefore never fires on the exact
+ * hostname a real registration produces.
+ */
+function embeddedIpv4FromGroups(groups: number[]): [number, number, number, number] | null {
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups as [
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+
+  // ::ffff:0:0/96 — IPv4-mapped, the form the OS actually routes as IPv4.
+  const isIpv4Mapped = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0xffff;
+  // ::/96 — the deprecated IPv4-compatible form (`::a.b.c.d`).
+  const isIpv4Compatible = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0;
+  // 64:ff9b::/96 — the NAT64 well-known prefix; a NAT64 gateway forwards to the embedded IPv4.
+  const isNat64 = g0 === 0x0064 && g1 === 0xff9b && g2 === 0 && g3 === 0 && g4 === 0 && g5 === 0;
+
+  if (!isIpv4Mapped && !isIpv4Compatible && !isNat64) return null;
+
+  // Each group is 16 bits — two octets, high byte first.
+  return [g6 >>> 8, g6 & 0xff, g7 >>> 8, g7 & 0xff];
+}
+
 function isDisallowedIpv6(address: string): boolean {
   const addr = address.split("%")[0]!.toLowerCase(); // drop any zone id (fe80::1%eth0)
 
   // An IPv4 address embedded in the trailing group (`::ffff:169.254.169.254`)
   // reaches exactly the same host as the plain IPv4 form, so it gets the same
   // treatment rather than sliding through as "some IPv6 address".
+  //
+  // This has to run before expandIpv6: parseGroups rejects any group that is
+  // not valid hex, so a literal dotted-decimal tail makes expandIpv6 return
+  // null. It only catches hostnames that still carry the dotted quad as text —
+  // the numeric check below is what catches the normalised form.
   const embedded = parseIpv4Octets(addr.slice(addr.lastIndexOf(":") + 1));
   if (embedded) return isDisallowedIpv4(embedded);
 
@@ -84,6 +125,12 @@ function isDisallowedIpv6(address: string): boolean {
 
   // :: (unspecified) and ::1 (loopback), in any written form.
   if (groups.slice(0, 7).every((g) => g === 0) && groups[7]! <= 1) return true;
+
+  // An IPv4 destination embedded numerically under ::ffff:0:0/96, ::/96 or
+  // 64:ff9b::/96 gets the same range check as the plain IPv4 form — it reaches
+  // the same host.
+  const embeddedFromGroups = embeddedIpv4FromGroups(groups);
+  if (embeddedFromGroups && isDisallowedIpv4(embeddedFromGroups)) return true;
 
   const first = groups[0]!;
   if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local

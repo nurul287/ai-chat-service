@@ -331,6 +331,60 @@ describe("runChat", () => {
     );
   });
 
+  it("still reaches done when a custom tool's execute resolves to a failure shape", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { listActiveTools } = await import("../tools/tenant-tools.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    vi.mocked(listActiveTools).mockResolvedValue([
+      {
+        id: "tool-1",
+        name: "lookup_order",
+        description: "Looks up an order",
+        inputSchema: { type: "object", properties: { orderId: { type: "string" } } },
+        endpointUrl: "https://tenant.example.com/tool",
+        hmacSecret: "whsec_x",
+        authHeader: null,
+      },
+    ] as never);
+    // callTenantEndpoint never throws, so a dead tenant endpoint reaches the
+    // loop as ordinary data: the exact { error } shape custom-tool.ts maps a
+    // failed call to. The turn must carry on and finish, not abort.
+    vi.mocked(streamText).mockReturnValue(
+      fakeResult([
+        {
+          type: "tool-result",
+          toolCallId: "c1",
+          toolName: "lookup_order",
+          input: { orderId: "123" },
+          output: { error: "Tool endpoint responded with status 500" },
+        },
+        { type: "text-delta", id: "1", text: "Sorry, I can't reach that system right now." },
+        { type: "finish", totalUsage: {} },
+      ]) as never,
+    );
+
+    const { runChat } = await import("./chat.service");
+    const events = await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    expect(events).toContainEqual({
+      event: "tool_call",
+      data: {
+        toolName: "lookup_order",
+        arguments: { orderId: "123" },
+        result: { error: "Tool endpoint responded with status 500" },
+      },
+    });
+    expect(events).not.toContainEqual(expect.objectContaining({ event: "error" }));
+    expect(events.at(-1)).toEqual({
+      event: "done",
+      data: { conversationId: "conv-1", messageId: "msg-1" },
+    });
+  });
+
   it("does not include a revoked or another tenant's tool", async () => {
     const { getConversation, appendMessage } = await import("./conversations.service");
     const { listActiveTools } = await import("../tools/tenant-tools.service");

@@ -123,6 +123,16 @@ Railway → your service → **Variables**:
 
 - [ ] `DATABASE_URL` — the connection string from step 2
 - [ ] `VOYAGE_API_KEY` — your Voyage key
+- [ ] `OPENROUTER_API_KEY` — your OpenRouter key. Required unless you set
+      `CHAT_MODEL_PROVIDER=anthropic`, in which case set `ANTHROPIC_API_KEY`
+      instead. The service refuses to boot without the one matching the
+      provider in use.
+- [ ] `TOOL_SECRETS_ENCRYPTION_KEY` — 64 hex characters (32 bytes), generated
+      with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+      **Save it in your password manager before pasting it in.** It encrypts
+      every custom tool's HMAC secret at rest, and changing it later makes all
+      existing tool secrets permanently undecryptable — each affected tool
+      then has to be revoked and re-registered with a new secret.
 - [ ] `NODE_ENV` — `production`
 
 **Leave `PORT` unset for now.** Railway injects a port dynamically and the

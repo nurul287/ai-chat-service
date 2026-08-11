@@ -22,6 +22,16 @@ describe("generateApiKey", () => {
     const keys = new Set(Array.from({ length: 200 }, () => generateApiKey().plaintext));
     expect(keys.size).toBe(200);
   });
+
+  it("defaults to a secret key with the sk_live_ prefix", () => {
+    const { plaintext } = generateApiKey();
+    expect(plaintext.startsWith("sk_live_")).toBe(true);
+  });
+
+  it("generates a publishable key with the pk_live_ prefix", () => {
+    const { plaintext } = generateApiKey("publishable");
+    expect(plaintext.startsWith("pk_live_")).toBe(true);
+  });
 });
 
 describe("hashApiKey", () => {

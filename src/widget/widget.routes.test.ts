@@ -1,4 +1,17 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+vi.mock("../lib/voyage", () => ({
+  embedDocuments: vi.fn(async (texts: string[]) =>
+    texts.map(() => Array.from({ length: 1024 }, () => 0.01)),
+  ),
+  embedQuery: vi.fn(async () => Array.from({ length: 1024 }, () => 0.01)),
+  rerank: vi.fn(async (_q: string, texts: string[]) => texts.map((_t, i) => i)),
+}));
+
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
+  return { ...actual, streamText: vi.fn(), generateText: vi.fn() };
+});
+
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { apiKeys, tenants } from "../db/schema";
@@ -129,6 +142,46 @@ describe("POST /widget/session", () => {
 
     expect(res.statusCode).toBeLessThan(300);
     expect(res.headers["access-control-allow-origin"]).toBe("https://acme.com");
+  });
+});
+
+describe("POST /widget/chat", () => {
+  it("streams a reply for an allowed origin, using a fresh session id", async () => {
+    const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+    const { streamText } = await import("ai");
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        yield { type: "text-delta", id: "1", text: "Hello" };
+        yield { type: "finish", totalUsage: {} };
+      })(),
+      finalStep: Promise.resolve({ providerMetadata: undefined }),
+    } as never);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/widget/chat",
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com", accept: "text/event-stream" },
+      payload: { externalUserId: "visitor-1", message: "hi" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+    expect(res.body).toContain("event: token");
+    expect(res.body).toContain("event: done");
+  });
+
+  it("rejects a request from a disallowed origin before ever starting a stream", async () => {
+    const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/widget/chat",
+      headers: { authorization: `Bearer ${key}`, origin: "https://evil.example.com" },
+      payload: { externalUserId: "visitor-1", message: "hi" },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(res.headers["content-type"]).not.toContain("text/event-stream");
   });
 });
 

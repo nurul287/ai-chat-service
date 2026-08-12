@@ -11,8 +11,8 @@ import {
   listMessagesQuery,
   messageResponse,
 } from "./chat.schema";
-import { ConversationNotFoundError, runChat, type ChatWireEvent } from "./chat.service";
 import { getConversationByIdForTenant, listConversations, listMessages } from "./conversations.service";
+import { streamChatResponse } from "./stream-chat-response";
 
 function toPublicConversation(c: Conversation) {
   return { id: c.id, externalUserId: c.externalUserId, createdAt: c.createdAt, updatedAt: c.updatedAt };
@@ -20,10 +20,6 @@ function toPublicConversation(c: Conversation) {
 
 function toPublicMessage(m: Message) {
   return { id: m.id, role: m.role, content: m.content, createdAt: m.createdAt };
-}
-
-function toSSEFrame(event: ChatWireEvent) {
-  return { event: event.event, data: event.data };
 }
 
 const chatRoutes: FastifyPluginAsync = async (fastify) => {
@@ -51,31 +47,12 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const { externalUserId, conversationId, message } = request.body;
-      const generator = runChat({
+      await streamChatResponse(reply, {
         tenantId: request.tenant!.id,
         externalUserId,
         conversationId: conversationId ?? null,
         message,
       });
-
-      let first: IteratorResult<ChatWireEvent>;
-      try {
-        first = await generator.next();
-      } catch (err) {
-        if (err instanceof ConversationNotFoundError) {
-          return reply
-            .code(404)
-            .send({ error: { code: "not_found", message: "Conversation not found" } });
-        }
-        throw err;
-      }
-
-      async function* toSSE() {
-        if (!first.done) yield toSSEFrame(first.value);
-        for await (const event of generator) yield toSSEFrame(event);
-      }
-
-      await reply.sse.send(toSSE());
     },
   );
 

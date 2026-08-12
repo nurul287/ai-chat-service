@@ -6,6 +6,7 @@ import fastifySwaggerUI from "@fastify/swagger-ui";
 import Fastify, {
   type FastifyError,
   type FastifyInstance,
+  type FastifyRequest,
   type FastifyServerOptions,
 } from "fastify";
 import {
@@ -20,7 +21,10 @@ import chatRoutes from "./chat/chat.routes";
 import documentsRoutes from "./documents/documents.routes";
 import { defaultLogger } from "./lib/logger";
 import authPlugin from "./plugins/auth";
+import publishableAuthPlugin from "./plugins/publishable-auth";
+import { verifyPublishableApiKey } from "./tenants/tenants.service";
 import toolsRoutes from "./tools/tools.routes";
+import widgetRoutes from "./widget/widget.routes";
 
 /**
  * A factory rather than a module-level singleton: it keeps `inject()` clean in
@@ -38,12 +42,55 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
 
   void app.register(fastifyHelmet);
 
-  // CORS is registered but closed. Sprint 1 issues only SECRET keys, which must
-  // never reach a browser — so granting cross-origin access would actively
-  // encourage the one thing docs/authentication.md warns against. Sprint 4 adds
-  // publishable keys with a per-tenant domain allowlist; this is the single
-  // place that changes when it does.
-  void app.register(fastifyCors, { origin: false });
+  // CORS is registered exactly once, for the whole app, with a single
+  // path-routing delegator: /widget/* gets the per-tenant publishable-key
+  // check below, everything else (/v1, /health, /docs) stays closed. This
+  // MUST be a single registration — @fastify/cors decorates a
+  // `corsPreflightEnabled` property onto the request, and Fastify refuses to
+  // add the same decorator twice anywhere in an ancestor chain
+  // (FST_ERR_DEC_ALREADY_PRESENT). Since every route in this app (including
+  // /widget) descends from this root instance, a second, separately-scoped
+  // `register(fastifyCors, ...)` — e.g. nested inside the `/widget` prefix
+  // block below — throws at boot. Verified empirically against the
+  // installed @fastify/cors@11.3.0 + fastify@5.10.0 + fastify-plugin@6.0.0.
+  //
+  // Sprint 1 issued only SECRET keys, which must never reach a browser (see
+  // docs/authentication.md) — hence the `origin: false` fallback below.
+  // Sprint 4 adds publishable keys with a per-tenant domain allowlist; the
+  // `/widget` branch of this delegator is the part that implements it.
+  //
+  // The delegator MUST be passed as `{ delegator: fn }`, not as a bare `fn`
+  // — @fastify/cors@11.3.0 silently falls back to wildcard `*` CORS if a
+  // bare function is passed as the options argument instead, with no error
+  // (see widget.routes.test.ts's "must NOT be * or the disallowed origin"
+  // assertion, which is the one that would catch this regressing).
+  void app.register(fastifyCors, {
+    delegator: async (request: FastifyRequest) => {
+      if (!request.url.startsWith("/widget")) {
+        return { origin: false };
+      }
+
+      const origin = request.headers.origin;
+
+      // Preflight never carries the real request's Authorization header, so
+      // there's no key yet to resolve a tenant from. This branch is inert:
+      // the actual authorization decision happens in
+      // publishableAuthPlugin's preHandler on the real request, which runs
+      // regardless of what CORS decided here.
+      if (request.method === "OPTIONS") {
+        return { origin: origin ?? false };
+      }
+
+      const header = request.headers.authorization;
+      if (!header?.startsWith("Bearer ") || !origin) {
+        return { origin: false };
+      }
+
+      const tenant = await verifyPublishableApiKey(header.slice("Bearer ".length).trim());
+      const allowed = tenant?.allowedOrigins.includes(origin) ?? false;
+      return { origin: allowed ? origin : false };
+    },
+  });
 
   // Registered BEFORE the routes so the spec builder sees them.
   void app.register(fastifySwagger, {
@@ -100,6 +147,20 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
       await v1.register(toolsRoutes);
     },
     { prefix: "/v1" },
+  );
+
+  // A sibling of /v1, not nested inside it — see this plan's Global
+  // Constraints for why nesting here would incorrectly inherit /v1's
+  // closed CORS and secret-key auth. Per-tenant CORS for this prefix is
+  // implemented in the single app-wide delegator registered above, not
+  // here — see that registration's comment for why it can't also be
+  // registered a second time, scoped to this block.
+  void app.register(
+    async (widget) => {
+      await widget.register(publishableAuthPlugin);
+      await widget.register(widgetRoutes);
+    },
+    { prefix: "/widget" },
   );
 
   app.setNotFoundHandler(async (_request, reply) =>

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import fastifyCors from "@fastify/cors";
 import fastifyHelmet from "@fastify/helmet";
 import fastifySSE from "@fastify/sse";
@@ -140,6 +142,23 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
 
   // Hidden from the spec it serves — a self-referential entry is just noise.
   app.get("/openapi.json", { schema: { hide: true } }, async () => app.swagger());
+
+  let widgetScriptCache: string | null = null;
+  function getWidgetScript(): string {
+    // Lazy, not module-load-time: this file only exists after `pnpm
+    // build:widget` has run, and route tests that never touch this
+    // endpoint shouldn't fail to import app.ts just because that build
+    // step hasn't happened yet in their environment.
+    widgetScriptCache ??= readFileSync(join(__dirname, "../widget-dist/widget.js"), "utf8");
+    return widgetScriptCache;
+  }
+
+  app.get("/widget.js", { schema: { hide: true } }, async (_request, reply) => {
+    return reply
+      .type("application/javascript")
+      .header("Cache-Control", "public, max-age=3600")
+      .send(getWidgetScript());
+  });
 
   // The /v1 wrapper is the encapsulation boundary. authPlugin is `fp`-wrapped,
   // so its preHandler attaches to THIS scope — covering every route registered

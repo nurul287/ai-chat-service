@@ -1,4 +1,5 @@
 import {
+  clearPersistedConversationId,
   getOrCreateSession,
   getPersistedConversationId,
   persistConversationId,
@@ -66,20 +67,52 @@ async function init(): Promise<void> {
     void sendMessage(message);
   });
 
-  const persistedConversationId = getPersistedConversationId();
+  const persistedConversationId = getPersistedConversationId(apiKey);
   if (persistedConversationId) {
     conversationId = persistedConversationId;
     void loadHistory();
   }
 
+  /**
+   * Restores the tail of the conversation, not its head. The history route
+   * orders ascending (correct for a chat log), so page 1 is the OLDEST
+   * messages — for any conversation past one page, a returning visitor
+   * would otherwise see ancient history and none of the recent exchange.
+   * Page 1 is fetched first only to learn `meta.total`; the last page is
+   * what actually gets rendered.
+   */
   async function loadHistory(): Promise<void> {
     try {
       const externalUserId = await getOrCreateSession(baseUrl, apiKey!);
-      const url = `${baseUrl}/widget/conversations/${persistedConversationId}/messages?externalUserId=${encodeURIComponent(externalUserId)}`;
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
-      if (!res.ok) return; // conversation gone or not found — fine, the widget still works fresh
+      const limit = 50;
+      const baseHistoryUrl = `${baseUrl}/widget/conversations/${persistedConversationId}/messages?externalUserId=${encodeURIComponent(externalUserId)}&limit=${limit}`;
 
-      const body = (await res.json()) as { data: { role: "user" | "assistant"; content: string }[] };
+      let res = await fetch(baseHistoryUrl, { headers: { Authorization: `Bearer ${apiKey}` } });
+
+      if (res.status === 404) {
+        // Stale conversation discovered at page load — clear it, or every
+        // future reload retries the same dead id forever.
+        conversationId = null;
+        clearPersistedConversationId(apiKey!);
+        return;
+      }
+      if (!res.ok) return; // any other failure — fine, the widget still works fresh
+
+      type HistoryPage = {
+        data: { role: "user" | "assistant"; content: string }[];
+        meta: { page: number; limit: number; total: number };
+      };
+      let body = (await res.json()) as HistoryPage;
+
+      const lastPage = Math.max(1, Math.ceil(body.meta.total / limit));
+      if (lastPage > 1) {
+        res = await fetch(`${baseHistoryUrl}&page=${lastPage}`, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        });
+        if (!res.ok) return;
+        body = (await res.json()) as HistoryPage;
+      }
+
       for (const msg of body.data) {
         appendMessage(messageList, msg.role, msg.content);
       }
@@ -91,7 +124,20 @@ async function init(): Promise<void> {
   async function sendMessage(message: string): Promise<void> {
     appendMessage(messageList, "user", message);
     const assistantBubble = appendMessage(messageList, "assistant", "");
+    await streamReply(message, assistantBubble, true);
+  }
 
+  /**
+   * Split out of sendMessage so a retry can reuse the SAME assistant
+   * bubble: a stale conversationId 404s, and the retry has to look like
+   * the original turn finally answering, not like the visitor's message
+   * being duplicated.
+   */
+  async function streamReply(
+    message: string,
+    assistantBubble: HTMLDivElement,
+    allowRetryOnStaleConversation: boolean,
+  ): Promise<void> {
     try {
       const externalUserId = await getOrCreateSession(baseUrl, apiKey!);
 
@@ -100,6 +146,19 @@ async function init(): Promise<void> {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ externalUserId, conversationId, message }),
       });
+
+      // A persisted conversation can go away underneath us (deleted, or
+      // the tenant swapped their publishable key). Without this, every
+      // future message 404s forever and a reload doesn't help, because
+      // init() just re-reads the same dead id. Retried exactly once, as a
+      // brand-new conversation — note the retry sends no conversationId,
+      // since `conversationId` is nulled first.
+      if (res.status === 404 && conversationId !== null && allowRetryOnStaleConversation) {
+        conversationId = null;
+        clearPersistedConversationId(apiKey!);
+        await streamReply(message, assistantBubble, false);
+        return;
+      }
 
       if (!res.ok || !res.body) {
         assistantBubble.textContent = "Sorry, something went wrong.";
@@ -112,7 +171,7 @@ async function init(): Promise<void> {
           messageList.scrollTop = messageList.scrollHeight;
         } else if (frame.event === "done") {
           conversationId = (frame.data as { conversationId: string }).conversationId;
-          persistConversationId(conversationId);
+          persistConversationId(apiKey!, conversationId);
         } else if (frame.event === "error") {
           assistantBubble.textContent = "Sorry, something went wrong.";
         }

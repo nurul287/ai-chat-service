@@ -115,4 +115,21 @@ describe("security headers", () => {
     // the widget could never actually be embedded anywhere.
     expect(res.headers["cross-origin-resource-policy"]).toBe("cross-origin");
   });
+
+  it("scopes that CORP relaxation to /widget.js alone — every other route keeps helmet's same-origin", async () => {
+    const app = buildApp({ logger: false });
+
+    // The negative half of the test above. `cross-origin` CORP is what
+    // lets any site read a response, so the relaxation leaking past
+    // /widget.js — a route-level `.header()` accidentally becoming an
+    // app-wide hook, say — would silently widen the entire API. Checked
+    // on two unrelated routes rather than one, so a single-route fluke
+    // can't pass it.
+    const health = await app.inject({ method: "GET", url: "/health" });
+    const spec = await app.inject({ method: "GET", url: "/openapi.json" });
+    await app.close();
+
+    expect(health.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(spec.headers["cross-origin-resource-policy"]).toBe("same-origin");
+  });
 });

@@ -154,6 +154,21 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
   }
 
   app.get("/widget.js", { schema: { hide: true } }, async (_request, reply) => {
+    let script: string;
+    try {
+      script = getWidgetScript();
+    } catch {
+      // readFileSync throws ENOENT when widget-dist/widget.js was never
+      // built. Caught here so it can never reach the global error
+      // handler, which sends err.message verbatim — and an ENOENT
+      // message embeds the absolute server filesystem path, which would
+      // be handed to an unauthenticated caller on a route that requires
+      // no key at all.
+      return reply
+        .code(503)
+        .send({ error: { code: "internal_error", message: "Widget script unavailable" } });
+    }
+
     return reply
       .type("application/javascript")
       .header("Cache-Control", "public, max-age=3600")
@@ -163,7 +178,7 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
       // blocks outright in a real browser (verified manually: without this,
       // Chrome refuses the request with net::ERR_BLOCKED_BY_RESPONSE).
       .header("Cross-Origin-Resource-Policy", "cross-origin")
-      .send(getWidgetScript());
+      .send(script);
   });
 
   // The /v1 wrapper is the encapsulation boundary. authPlugin is `fp`-wrapped,

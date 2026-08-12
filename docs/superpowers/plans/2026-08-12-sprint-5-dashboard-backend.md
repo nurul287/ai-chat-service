@@ -337,8 +337,8 @@ import {
 ```ts
 describe("createTenant with ownerUserId", () => {
   it("stores the owner", async () => {
-    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
-    expect(tenant.ownerUserId).toBe("user-1");
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+    expect(tenant.ownerUserId).toBe("00000000-0000-0000-0000-000000000001");
   });
 
   it("still creates a tenant with no owner (the CLI path)", async () => {
@@ -349,8 +349,8 @@ describe("createTenant with ownerUserId", () => {
 
 describe("getTenantByOwnerUserId", () => {
   it("returns the tenant owned by that user", async () => {
-    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
-    expect((await getTenantByOwnerUserId("user-1"))?.id).toBe(tenant.id);
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+    expect((await getTenantByOwnerUserId("00000000-0000-0000-0000-000000000001"))?.id).toBe(tenant.id);
   });
 
   it("returns null when no tenant has that owner", async () => {
@@ -572,7 +572,7 @@ afterAll(async () => {
 
 describe("dashboardAuthPlugin", () => {
   it("resolves a valid token to a dashboardUserId", async () => {
-    verifySupabaseTokenMock.mockResolvedValueOnce({ id: "user-1", email: "a@b.com" });
+    verifySupabaseTokenMock.mockResolvedValueOnce({ id: "00000000-0000-0000-0000-000000000001", email: "a@b.com" });
 
     const res = await app.inject({
       method: "GET",
@@ -581,7 +581,7 @@ describe("dashboardAuthPlugin", () => {
     });
 
     expect(res.statusCode).toBe(200);
-    expect(res.json().userId).toBe("user-1");
+    expect(res.json().userId).toBe("00000000-0000-0000-0000-000000000001");
   });
 
   it("rejects a request with no Authorization header", async () => {
@@ -605,8 +605,8 @@ describe("dashboardAuthPlugin", () => {
 
 describe("requireDashboardTenant", () => {
   it("resolves the tenant owned by the authenticated user", async () => {
-    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
-    verifySupabaseTokenMock.mockResolvedValueOnce({ id: "user-1", email: "a@b.com" });
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+    verifySupabaseTokenMock.mockResolvedValueOnce({ id: "00000000-0000-0000-0000-000000000001", email: "a@b.com" });
 
     const res = await app.inject({
       method: "GET",
@@ -619,7 +619,7 @@ describe("requireDashboardTenant", () => {
   });
 
   it("returns 404 when the authenticated user has no tenant", async () => {
-    verifySupabaseTokenMock.mockResolvedValueOnce({ id: "user-with-no-tenant", email: "a@b.com" });
+    verifySupabaseTokenMock.mockResolvedValueOnce({ id: "00000000-0000-0000-0000-000000000099", email: "a@b.com" });
 
     const res = await app.inject({
       method: "GET",
@@ -796,12 +796,12 @@ function auth(userId: string) {
 
 describe("GET /dashboard/tenant", () => {
   it("returns the tenant owned by the authenticated user", async () => {
-    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const res = await app.inject({
       method: "GET",
       url: "/dashboard/tenant",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
     });
 
     expect(res.statusCode).toBe(200);
@@ -813,7 +813,7 @@ describe("GET /dashboard/tenant", () => {
     const res = await app.inject({
       method: "GET",
       url: "/dashboard/tenant",
-      headers: auth("user-with-no-tenant"),
+      headers: auth("00000000-0000-0000-0000-000000000099"),
     });
 
     expect(res.statusCode).toBe(404);
@@ -825,7 +825,7 @@ describe("POST /dashboard/signup", () => {
     const res = await app.inject({
       method: "POST",
       url: "/dashboard/signup",
-      headers: auth("new-user"),
+      headers: auth("00000000-0000-0000-0000-000000000002"),
       payload: { tenantName: "New Co", tenantSlug: "new-co" },
     });
 
@@ -836,12 +836,12 @@ describe("POST /dashboard/signup", () => {
   });
 
   it("returns 409 when this user already has a tenant", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const res = await app.inject({
       method: "POST",
       url: "/dashboard/signup",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
       payload: { tenantName: "Second Co", tenantSlug: "second-co" },
     });
 
@@ -854,7 +854,7 @@ describe("POST /dashboard/signup", () => {
     const res = await app.inject({
       method: "POST",
       url: "/dashboard/signup",
-      headers: auth("new-user"),
+      headers: auth("00000000-0000-0000-0000-000000000002"),
       payload: { tenantName: "New Co", tenantSlug: "taken-slug" },
     });
 
@@ -865,7 +865,7 @@ describe("POST /dashboard/signup", () => {
     const res = await app.inject({
       method: "POST",
       url: "/dashboard/signup",
-      headers: auth("new-user"),
+      headers: auth("00000000-0000-0000-0000-000000000002"),
       payload: { tenantName: "New Co", tenantSlug: "New-Co" },
     });
 
@@ -1136,12 +1136,12 @@ function auth(userId: string) {
 
 describe("dashboard document routes", () => {
   it("creates, lists, and deletes a document scoped to the owner's tenant", async () => {
-    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const put = await app.inject({
       method: "PUT",
       url: "/dashboard/documents",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
       payload: { externalId: "doc-1", title: "Hello", content: "World" },
     });
     expect(put.statusCode).toBe(200);
@@ -1149,7 +1149,7 @@ describe("dashboard document routes", () => {
     const list = await app.inject({
       method: "GET",
       url: "/dashboard/documents",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
     });
     expect(list.statusCode).toBe(200);
     expect(list.json().data).toHaveLength(1);
@@ -1158,7 +1158,7 @@ describe("dashboard document routes", () => {
     const del = await app.inject({
       method: "DELETE",
       url: "/dashboard/documents/doc-1",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
     });
     expect(del.statusCode).toBe(200);
     expect(del.json().data.deleted).toBe(true);
@@ -1167,20 +1167,20 @@ describe("dashboard document routes", () => {
   });
 
   it("never lists another tenant's documents", async () => {
-    await createTenant({ name: "A", slug: "a", ownerUserId: "user-a" });
-    await createTenant({ name: "B", slug: "b", ownerUserId: "user-b" });
+    await createTenant({ name: "A", slug: "a", ownerUserId: "00000000-0000-0000-0000-00000000000a" });
+    await createTenant({ name: "B", slug: "b", ownerUserId: "00000000-0000-0000-0000-00000000000b" });
 
     await app.inject({
       method: "PUT",
       url: "/dashboard/documents",
-      headers: auth("user-a"),
+      headers: auth("00000000-0000-0000-0000-00000000000a"),
       payload: { externalId: "doc-1", content: "A's document" },
     });
 
     const list = await app.inject({
       method: "GET",
       url: "/dashboard/documents",
-      headers: auth("user-b"),
+      headers: auth("00000000-0000-0000-0000-00000000000b"),
     });
 
     expect(list.json().data).toHaveLength(0);
@@ -1190,7 +1190,7 @@ describe("dashboard document routes", () => {
     const res = await app.inject({
       method: "GET",
       url: "/dashboard/documents",
-      headers: auth("user-with-no-tenant"),
+      headers: auth("00000000-0000-0000-0000-000000000099"),
     });
     expect(res.statusCode).toBe(404);
   });
@@ -1427,38 +1427,38 @@ function auth(userId: string) {
 
 describe("dashboard key routes", () => {
   it("creates, lists, and revokes a secret key", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const create = await app.inject({
       method: "POST",
       url: "/dashboard/keys",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
       payload: { name: "production" },
     });
     expect(create.statusCode).toBe(200);
     expect(create.json().data.plaintext).toMatch(/^sk_live_/);
     const keyId = create.json().data.id as string;
 
-    const list = await app.inject({ method: "GET", url: "/dashboard/keys", headers: auth("user-1") });
+    const list = await app.inject({ method: "GET", url: "/dashboard/keys", headers: auth("00000000-0000-0000-0000-000000000001") });
     expect(list.json().data.some((k: { name: string }) => k.name === "production")).toBe(true);
     expect(JSON.stringify(list.json())).not.toContain("sk_live_");
 
     const revoke = await app.inject({
       method: "DELETE",
       url: `/dashboard/keys/${keyId}`,
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
     });
     expect(revoke.statusCode).toBe(200);
   });
 
   it("returns 404 when revoking a key that isn't this tenant's", async () => {
-    await createTenant({ name: "A", slug: "a", ownerUserId: "user-a" });
-    await createTenant({ name: "B", slug: "b", ownerUserId: "user-b" });
+    await createTenant({ name: "A", slug: "a", ownerUserId: "00000000-0000-0000-0000-00000000000a" });
+    await createTenant({ name: "B", slug: "b", ownerUserId: "00000000-0000-0000-0000-00000000000b" });
 
     const create = await app.inject({
       method: "POST",
       url: "/dashboard/keys",
-      headers: auth("user-a"),
+      headers: auth("00000000-0000-0000-0000-00000000000a"),
       payload: { name: "a-key" },
     });
     const keyId = create.json().data.id as string;
@@ -1466,7 +1466,7 @@ describe("dashboard key routes", () => {
     const revoke = await app.inject({
       method: "DELETE",
       url: `/dashboard/keys/${keyId}`,
-      headers: auth("user-b"),
+      headers: auth("00000000-0000-0000-0000-00000000000b"),
     });
     expect(revoke.statusCode).toBe(404);
   });
@@ -1686,9 +1686,9 @@ function auth(userId: string) {
 
 describe("dashboard widget-config routes", () => {
   it("starts with no allowed origins and no publishable key", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
-    const res = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("user-1") });
+    const res = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("00000000-0000-0000-0000-000000000001") });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().data.allowedOrigins).toEqual([]);
@@ -1697,32 +1697,32 @@ describe("dashboard widget-config routes", () => {
   });
 
   it("sets allowed origins", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const put = await app.inject({
       method: "PUT",
       url: "/dashboard/widget/origins",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
       payload: { origins: ["https://acme.com"] },
     });
     expect(put.statusCode).toBe(200);
 
-    const get = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("user-1") });
+    const get = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("00000000-0000-0000-0000-000000000001") });
     expect(get.json().data.allowedOrigins).toEqual(["https://acme.com"]);
   });
 
   it("mints a publishable key and reflects its prefix afterwards", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const mint = await app.inject({
       method: "POST",
       url: "/dashboard/widget/publishable-key",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
     });
     expect(mint.statusCode).toBe(200);
     expect(mint.json().data.plaintext).toMatch(/^pk_live_/);
 
-    const get = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("user-1") });
+    const get = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("00000000-0000-0000-0000-000000000001") });
     expect(get.json().data.publishableKeyPrefix).toBe(mint.json().data.prefix);
   });
 });
@@ -2121,21 +2121,21 @@ function auth(userId: string) {
 
 describe("GET /dashboard/usage", () => {
   it("returns usage totals for the authenticated tenant", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
-    const res = await app.inject({ method: "GET", url: "/dashboard/usage", headers: auth("user-1") });
+    const res = await app.inject({ method: "GET", url: "/dashboard/usage", headers: auth("00000000-0000-0000-0000-000000000001") });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().data.totals).toEqual({ conversations: 0, messages: 0, tokens: 0 });
   });
 
   it("respects the days query param", async () => {
-    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "user-1" });
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 
     const res = await app.inject({
       method: "GET",
       url: "/dashboard/usage?days=7",
-      headers: auth("user-1"),
+      headers: auth("00000000-0000-0000-0000-000000000001"),
     });
 
     expect(res.statusCode).toBe(200);
@@ -2145,7 +2145,7 @@ describe("GET /dashboard/usage", () => {
     const res = await app.inject({
       method: "GET",
       url: "/dashboard/usage",
-      headers: auth("user-with-no-tenant"),
+      headers: auth("00000000-0000-0000-0000-000000000099"),
     });
     expect(res.statusCode).toBe(404);
   });

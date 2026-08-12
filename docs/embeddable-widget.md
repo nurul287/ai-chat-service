@@ -29,13 +29,25 @@ A **publishable** key (`pk_live_…`) is meant to be public — it's going to
 sit in your page's HTML source, visible to anyone who views it, exactly
 like a Stripe publishable key or a Google Maps API key. That's by design,
 not an oversight: the security boundary isn't secrecy of the key, it's the
-**domain allowlist** you set with `pnpm set-allowed-origins`. A
-publishable key only works from a browser sending one of those origins as
-its `Origin` header — copy the key into a request from anywhere else and
-it's rejected, regardless of how the key was obtained.
+**domain allowlist** you set with `pnpm set-allowed-origins`.
+
+A publishable key only works from a browser sending one of those origins
+as its `Origin` header, when read through this service's CORS
+configuration. The server also independently checks that same header on
+every request, which closes a real gap CORS alone would leave — a
+disallowed origin is rejected even if a misconfigured CORS setup would
+have let it through. But `Origin` is an ordinary request header, not a
+cryptographic proof of origin, so this is **not** a defense against a
+deliberate attacker who already has the key and can set any header they
+like with a tool like `curl`.
+
+There is no rate limiting or usage quota on this yet (that lands in
+Sprint 6) — until then, treat a published `pk_live_…` key as effectively
+enabling anonymous, unmetered access to your tenant's chat engine, billed
+to you.
 
 A publishable key also cannot read or write documents, register custom
-tools, or do anything a secret key can — it only works against the two
+tools, or do anything a secret key can — it only works against the
 `/widget/*` routes. Never put a **secret** key (`sk_live_…`) anywhere a
 browser can see it; that one really is a secret. See
 [authentication.md](authentication.md) for the full contrast.
@@ -61,10 +73,14 @@ separate configuration step:
   authenticated by the publishable key and restricted to allowed origins
   instead of a secret key.
 - CORS is configured per-request based on your tenant's allowed origins,
-  but that's only what lets a browser *read* the response — the actual
-  authorization check happens server-side on every request, independent
-  of CORS, so a copied key still can't be used from an unauthorized origin
-  even by a non-browser client that ignores CORS entirely.
+  but that's only what lets a browser *read* the response. The same
+  `Origin` header is also checked server-side on every request,
+  independent of CORS — so a real browser on an unauthorized origin is
+  rejected either way, and a CORS misconfiguration alone can't open the
+  route up. That check reads a header the client sends, though: a
+  non-browser client that ignores CORS can also just set `Origin` to an
+  allowed value, so it stops honest misuse and misconfiguration, not a
+  deliberate attacker holding the key.
 
 ## What's not here yet
 

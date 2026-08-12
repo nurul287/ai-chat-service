@@ -157,6 +157,12 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
     return reply
       .type("application/javascript")
       .header("Cache-Control", "public, max-age=3600")
+      // Overrides @fastify/helmet's global default of `same-origin` — this
+      // script's entire purpose is to be loaded via a <script src> from a
+      // DIFFERENT origin (the tenant's own site), which `same-origin` CORP
+      // blocks outright in a real browser (verified manually: without this,
+      // Chrome refuses the request with net::ERR_BLOCKED_BY_RESPONSE).
+      .header("Cross-Origin-Resource-Policy", "cross-origin")
       .send(getWidgetScript());
   });
 

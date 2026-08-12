@@ -26,6 +26,8 @@
     "db:diff": "pnpm dlx supabase@2.98.2 db diff --linked",
     "db:generate": "drizzle-kit generate",
     "create-tenant": "tsx src/scripts/create-tenant.ts",
+    "issue-publishable-key": "tsx src/scripts/issue-publishable-key.ts",
+    "set-allowed-origins": "tsx src/scripts/set-allowed-origins.ts",
     "eval:retrieval": "tsx src/scripts/eval-retrieval.ts"
   },
   "dependencies": {

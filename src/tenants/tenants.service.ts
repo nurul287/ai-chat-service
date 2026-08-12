@@ -3,13 +3,22 @@ import { db } from "../db";
 import { apiKeys, tenants, type Tenant } from "../db/schema";
 import { generateApiKey, hashApiKey } from "../auth/api-key";
 
-export async function createTenant(input: { name: string; slug: string }): Promise<Tenant> {
+export async function createTenant(input: {
+  name: string;
+  slug: string;
+  ownerUserId?: string;
+}): Promise<Tenant> {
   const [tenant] = await db.insert(tenants).values(input).returning();
   return tenant!;
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug));
+  return tenant ?? null;
+}
+
+export async function getTenantByOwnerUserId(ownerUserId: string): Promise<Tenant | null> {
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.ownerUserId, ownerUserId));
   return tenant ?? null;
 }
 
@@ -33,6 +42,29 @@ export async function issueApiKey(
   const { plaintext, prefix, hash } = generateApiKey(kind);
   await db.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind });
   return { plaintext, prefix };
+}
+
+export async function listApiKeys(tenantId: string): Promise<
+  Array<{
+    id: string;
+    name: string;
+    keyPrefix: string;
+    lastUsedAt: string | null;
+    revokedAt: string | null;
+    createdAt: string;
+  }>
+> {
+  return db
+    .select({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      keyPrefix: apiKeys.keyPrefix,
+      lastUsedAt: apiKeys.lastUsedAt,
+      revokedAt: apiKeys.revokedAt,
+      createdAt: apiKeys.createdAt,
+    })
+    .from(apiKeys)
+    .where(eq(apiKeys.tenantId, tenantId));
 }
 
 export async function verifyApiKey(plaintext: string): Promise<Tenant | null> {
@@ -102,9 +134,17 @@ export async function flushApiKeyTouches(): Promise<void> {
   await Promise.all([...pendingTouches]);
 }
 
-export async function revokeApiKey(keyId: string): Promise<void> {
-  await db
+/**
+ * Tenant-scoped: the WHERE clause requires both tenantId and keyId to
+ * match, so a caller can never revoke another tenant's key by id alone —
+ * the dashboard route that calls this only ever knows its own
+ * request.tenant.id, never another tenant's.
+ */
+export async function revokeApiKey(tenantId: string, keyId: string): Promise<boolean> {
+  const revoked = await db
     .update(apiKeys)
     .set({ revokedAt: new Date().toISOString() })
-    .where(eq(apiKeys.id, keyId));
+    .where(and(eq(apiKeys.id, keyId), eq(apiKeys.tenantId, tenantId)))
+    .returning({ id: apiKeys.id });
+  return revoked.length > 0;
 }

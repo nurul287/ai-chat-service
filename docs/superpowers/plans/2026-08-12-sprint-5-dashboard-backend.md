@@ -1210,7 +1210,7 @@ Create `src/dashboard/documents.routes.ts`:
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { toIso, toPublicDocument } from "../documents/documents.routes";
+import { toPublicDocument } from "../documents/documents.routes";
 import {
   deleteDocumentParams,
   documentResponse,
@@ -1224,8 +1224,8 @@ import { requireDashboardTenant } from "../plugins/dashboard-auth";
 /**
  * Thin wrappers over documents.service.ts — identical behavior to
  * /v1/documents, just authenticated by a dashboard session instead of a
- * secret key. toIso/toPublicDocument are imported rather than
- * reimplemented so the two response shapes cannot drift apart.
+ * secret key. toPublicDocument is imported rather than reimplemented so
+ * the two response shapes cannot drift apart.
  */
 const dashboardDocumentsRoutes: FastifyPluginAsync = async (fastify) => {
   const app = fastify.withTypeProvider<ZodTypeProvider>();
@@ -1300,11 +1300,7 @@ const dashboardDocumentsRoutes: FastifyPluginAsync = async (fastify) => {
 };
 
 export default dashboardDocumentsRoutes;
-
-void toIso;
 ```
-
-Note: `toIso` is imported only because it lives alongside `toPublicDocument` in the same module and is used *by* `toPublicDocument` internally — this file doesn't call it directly. Remove the `import { toIso, ... }` and the trailing `void toIso;` line if the linter flags it as unused; keep only `toPublicDocument` in the import in that case.
 
 - [ ] **Step 6: Wire it into `app.ts`**
 
@@ -1543,8 +1539,13 @@ const dashboardKeysRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
+      // issueApiKey only returns { plaintext, prefix } — not the row's id —
+      // so the created row is looked up by its (unique) prefix afterwards.
       const { plaintext, prefix } = await issueApiKey(request.tenant!.id, request.body.name);
-      return reply.code(200).send({ data: { id: prefix, name: request.body.name, keyPrefix: prefix, plaintext } });
+      const [created] = (await listApiKeys(request.tenant!.id)).filter((k) => k.keyPrefix === prefix);
+      return reply
+        .code(200)
+        .send({ data: { id: created!.id, name: request.body.name, keyPrefix: prefix, plaintext } });
     },
   );
 
@@ -1572,20 +1573,6 @@ const dashboardKeysRoutes: FastifyPluginAsync = async (fastify) => {
 };
 
 export default dashboardKeysRoutes;
-```
-
-**Fix before running tests:** `POST /keys`'s response currently sends `id: prefix`, which is wrong — `issueApiKey` doesn't return the row's real `id`. Change the handler to look the key up after issuing it, since `issueApiKey` only returns `{ plaintext, prefix }`:
-
-```ts
-    async (request, reply) => {
-      const { plaintext, prefix } = await issueApiKey(request.tenant!.id, request.body.name);
-      const [created] = await listApiKeys(request.tenant!.id).then((keys) =>
-        keys.filter((k) => k.keyPrefix === prefix),
-      );
-      return reply
-        .code(200)
-        .send({ data: { id: created!.id, name: request.body.name, keyPrefix: prefix, plaintext } });
-    },
 ```
 
 - [ ] **Step 5: Wire it into `app.ts`**

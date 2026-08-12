@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getOrCreateSession } from "./session";
+import { getOrCreateSession, getPersistedConversationId, persistConversationId } from "./session";
 
 const originalFetch = global.fetch;
 
@@ -36,5 +36,16 @@ describe("getOrCreateSession", () => {
     global.fetch = vi.fn(async () => ({ ok: false, status: 401 })) as unknown as typeof fetch;
 
     await expect(getOrCreateSession("https://api.example.com", "pk_live_test")).rejects.toThrow(/401/);
+  });
+});
+
+describe("conversationId persistence", () => {
+  it("returns null when nothing is persisted", () => {
+    expect(getPersistedConversationId()).toBeNull();
+  });
+
+  it("round-trips a persisted conversationId", () => {
+    persistConversationId("conv-abc");
+    expect(getPersistedConversationId()).toBe("conv-abc");
   });
 });

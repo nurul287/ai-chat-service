@@ -1,4 +1,8 @@
-import { getOrCreateSession } from "./session";
+import {
+  getOrCreateSession,
+  getPersistedConversationId,
+  persistConversationId,
+} from "./session";
 import { appendMessage, mountWidget } from "./ui";
 
 type ChatSSEEvent = { event: string; data: unknown };
@@ -36,7 +40,7 @@ async function* parseSSE(response: Response): AsyncGenerator<ChatSSEEvent> {
   }
 }
 
-function init(): void {
+async function init(): Promise<void> {
   const script = document.currentScript as HTMLScriptElement | null;
   if (!script) return;
 
@@ -62,6 +66,28 @@ function init(): void {
     void sendMessage(message);
   });
 
+  const persistedConversationId = getPersistedConversationId();
+  if (persistedConversationId) {
+    conversationId = persistedConversationId;
+    void loadHistory();
+  }
+
+  async function loadHistory(): Promise<void> {
+    try {
+      const externalUserId = await getOrCreateSession(baseUrl, apiKey!);
+      const url = `${baseUrl}/widget/conversations/${persistedConversationId}/messages?externalUserId=${encodeURIComponent(externalUserId)}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
+      if (!res.ok) return; // conversation gone or not found — fine, the widget still works fresh
+
+      const body = (await res.json()) as { data: { role: "user" | "assistant"; content: string }[] };
+      for (const msg of body.data) {
+        appendMessage(messageList, msg.role, msg.content);
+      }
+    } catch {
+      // history restoration failing is not fatal — a fresh conversation still works
+    }
+  }
+
   async function sendMessage(message: string): Promise<void> {
     appendMessage(messageList, "user", message);
     const assistantBubble = appendMessage(messageList, "assistant", "");
@@ -86,6 +112,7 @@ function init(): void {
           messageList.scrollTop = messageList.scrollHeight;
         } else if (frame.event === "done") {
           conversationId = (frame.data as { conversationId: string }).conversationId;
+          persistConversationId(conversationId);
         } else if (frame.event === "error") {
           assistantBubble.textContent = "Sorry, something went wrong.";
         }
@@ -96,4 +123,4 @@ function init(): void {
   }
 }
 
-init();
+void init();

@@ -14,7 +14,7 @@ vi.mock("ai", async (importOriginal) => {
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
-import { apiKeys, tenants } from "../db/schema";
+import { apiKeys, conversations, messages, tenants } from "../db/schema";
 import { createTenant, issueApiKey, setAllowedOrigins } from "../tenants/tenants.service";
 import { buildApp } from "../app";
 
@@ -194,6 +194,78 @@ describe("/v1 routes reject publishable keys", () => {
       method: "GET",
       url: "/v1/documents",
       headers: { authorization: `Bearer ${plaintext}` },
+    });
+
+    expect(res.statusCode).toBe(401);
+  });
+});
+
+describe("GET /widget/conversations/:id/messages", () => {
+  it("returns the message log for the conversation's own visitor", async () => {
+    const { key, tenant } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+    const [conv] = await db
+      .insert(conversations)
+      .values({ tenantId: tenant.id, externalUserId: "visitor-1" })
+      .returning();
+    await db.insert(messages).values([
+      { conversationId: conv!.id, tenantId: tenant.id, role: "user", content: "hi" },
+      { conversationId: conv!.id, tenantId: tenant.id, role: "assistant", content: "hello!" },
+    ]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/widget/conversations/${conv!.id}/messages?externalUserId=visitor-1`,
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.map((m: { content: string }) => m.content)).toEqual(["hi", "hello!"]);
+  });
+
+  it("returns 404 when the externalUserId does not match the conversation's own visitor", async () => {
+    const { key, tenant } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+    const [conv] = await db
+      .insert(conversations)
+      .values({ tenantId: tenant.id, externalUserId: "visitor-1" })
+      .returning();
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/widget/conversations/${conv!.id}/messages?externalUserId=visitor-2`,
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com" },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("returns 404 for a conversation belonging to another tenant", async () => {
+    const a = await tenantWithPublishableKey("a", ["https://a.example.com"]);
+    const b = await tenantWithPublishableKey("b", ["https://b.example.com"]);
+    const [conv] = await db
+      .insert(conversations)
+      .values({ tenantId: a.tenant.id, externalUserId: "visitor-1" })
+      .returning();
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/widget/conversations/${conv!.id}/messages?externalUserId=visitor-1`,
+      headers: { authorization: `Bearer ${b.key}`, origin: "https://b.example.com" },
+    });
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("rejects a request from a disallowed origin", async () => {
+    const { key, tenant } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+    const [conv] = await db
+      .insert(conversations)
+      .values({ tenantId: tenant.id, externalUserId: "visitor-1" })
+      .returning();
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/widget/conversations/${conv!.id}/messages?externalUserId=visitor-1`,
+      headers: { authorization: `Bearer ${key}`, origin: "https://evil.example.com" },
     });
 
     expect(res.statusCode).toBe(401);

@@ -22,3 +22,13 @@ export async function getOrCreateSession(baseUrl: string, apiKey: string): Promi
   localStorage.setItem(STORAGE_KEY, body.externalUserId);
   return body.externalUserId;
 }
+
+const CONVERSATION_STORAGE_KEY = "ai-chat-widget:conversationId";
+
+export function getPersistedConversationId(): string | null {
+  return localStorage.getItem(CONVERSATION_STORAGE_KEY);
+}
+
+export function persistConversationId(conversationId: string): void {
+  localStorage.setItem(CONVERSATION_STORAGE_KEY, conversationId);
+}

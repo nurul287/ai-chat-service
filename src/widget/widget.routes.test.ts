@@ -170,6 +170,90 @@ describe("POST /widget/chat", () => {
     expect(res.body).toContain("event: done");
   });
 
+  it("withholds the sources and tool_call events that /v1/chat streams, without dropping token/done", async () => {
+    const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+    const { streamText } = await import("ai");
+    // The same shape chat.routes.test.ts's "streams token, sources, and
+    // done events" test uses — asserted in the opposite direction here,
+    // because this route's caller is an anonymous browser rather than the
+    // tenant's own backend.
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        yield { type: "text-delta", id: "1", text: "Paracetamol" };
+        yield {
+          type: "tool-result",
+          toolCallId: "c1",
+          toolName: "search_knowledge",
+          input: {},
+          // `content` and `metadata` are the two fields that must never
+          // reach a public browser — metadata is arbitrary tenant JSON.
+          output: [
+            {
+              externalId: "sku-1",
+              content: "INTERNAL-CHUNK-CONTENT",
+              metadata: { costPrice: "SECRET-COST-PRICE" },
+            },
+          ],
+        };
+        yield {
+          type: "tool-result",
+          toolCallId: "c2",
+          toolName: "lookup_order",
+          input: { orderId: "A-1" },
+          // A Sprint 3 custom tool's RAW upstream response body.
+          output: { status: "shipped", internalNote: "SECRET-CRM-PAYLOAD" },
+        };
+        yield { type: "finish", totalUsage: {} };
+      })(),
+      finalStep: Promise.resolve({ providerMetadata: undefined }),
+    } as never);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/widget/chat",
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com", accept: "text/event-stream" },
+      payload: { externalUserId: "visitor-1", message: "hi" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toContain("text/event-stream");
+
+    // Still streamed — the widget client needs all of these.
+    expect(res.body).toContain("event: token");
+    expect(res.body).toContain('"text":"Paracetamol"');
+    expect(res.body).toContain("event: done");
+
+    // Withheld.
+    expect(res.body).not.toContain("event: sources");
+    expect(res.body).not.toContain("event: tool_call");
+    // Not just the frame names — the payloads themselves must be absent.
+    expect(res.body).not.toContain("INTERNAL-CHUNK-CONTENT");
+    expect(res.body).not.toContain("SECRET-COST-PRICE");
+    expect(res.body).not.toContain("SECRET-CRM-PAYLOAD");
+    expect(res.body).not.toContain("lookup_order");
+  });
+
+  it("still streams a mid-stream error event, which the widget needs to show a failure", async () => {
+    const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+    const { streamText } = await import("ai");
+    vi.mocked(streamText).mockReturnValue({
+      stream: (async function* () {
+        yield { type: "error", error: new Error("rate limited") };
+      })(),
+      finalStep: Promise.resolve({ providerMetadata: undefined }),
+    } as never);
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/widget/chat",
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com", accept: "text/event-stream" },
+      payload: { externalUserId: "visitor-1", message: "hi" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("event: error");
+  });
+
   it("rejects a request from a disallowed origin before ever starting a stream", async () => {
     const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
 

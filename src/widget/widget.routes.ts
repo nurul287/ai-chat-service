@@ -4,10 +4,25 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import type { Message } from "../db/schema";
 import { chatBody, messageResponse } from "../chat/chat.schema";
+import type { ChatWireEvent } from "../chat/chat.service";
 import { getConversation, listMessages } from "../chat/conversations.service";
 import { streamChatResponse } from "../chat/stream-chat-response";
 import { errorResponse } from "../documents/documents.schema";
 import { widgetConversationParams, widgetMessagesQuery, widgetSessionResponse } from "./widget.schema";
+
+/**
+ * The only SSE events this route's caller — an anonymous browser holding a
+ * public key — is allowed to see. Deliberately an allowlist, not a
+ * denylist: a future ChatWireEvent variant is withheld by default rather
+ * than leaked until someone remembers to add it here.
+ *
+ * Withheld today: `sources` (verbatim document content plus arbitrary
+ * tenant-supplied metadata — cost prices, internal notes) and `tool_call`
+ * (a custom tool's RAW upstream response body, e.g. an internal CRM or
+ * order-lookup endpoint's actual output). /v1/chat, whose caller is the
+ * tenant's own backend, still receives both.
+ */
+const WIDGET_ALLOWED_EVENTS: ReadonlySet<ChatWireEvent["event"]> = new Set(["token", "done", "error"]);
 
 function toPublicMessage(m: Message) {
   return { id: m.id, role: m.role, content: m.content, createdAt: m.createdAt };
@@ -43,9 +58,13 @@ const widgetRoutes: FastifyPluginAsync = async (fastify) => {
         tags: ["Widget"],
         summary: "Send a message from the embeddable widget and receive a streamed reply",
         description:
-          "Identical wire contract to POST /v1/chat, authenticated by a publishable key " +
-          "instead of a secret key, and restricted to the tenant's allowed origins. See " +
-          "docs/errors.md for the pre-stream vs mid-stream error split.",
+          "Same wire contract as POST /v1/chat, authenticated by a publishable key " +
+          "instead of a secret key, and restricted to the tenant's allowed origins. " +
+          "Streams only the `token`, `done` and `error` events — unlike /v1/chat, the " +
+          "`sources` and `tool_call` events are withheld, since this route's caller is " +
+          "an untrusted browser and those events carry verbatim document content, " +
+          "tenant-supplied metadata, and raw custom-tool responses. See docs/errors.md " +
+          "for the pre-stream vs mid-stream error split.",
         security: [{ bearerAuth: [] }],
         body: chatBody,
         response: { 400: errorResponse, 401: errorResponse, 404: errorResponse },
@@ -54,12 +73,16 @@ const widgetRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const { externalUserId, conversationId, message } = request.body;
-      await streamChatResponse(reply, {
-        tenantId: request.tenant!.id,
-        externalUserId,
-        conversationId: conversationId ?? null,
-        message,
-      });
+      await streamChatResponse(
+        reply,
+        {
+          tenantId: request.tenant!.id,
+          externalUserId,
+          conversationId: conversationId ?? null,
+          message,
+        },
+        { allowedEvents: WIDGET_ALLOWED_EVENTS },
+      );
     },
   );
 

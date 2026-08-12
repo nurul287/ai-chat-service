@@ -68,10 +68,13 @@ separate configuration step:
 - The widget mints a session once (`POST /widget/session`) and persists
   the returned id in `localStorage`, so a returning visitor keeps their
   conversation history across page loads.
-- Every message goes to `POST /widget/chat` — the exact same SSE wire
-  contract as `POST /v1/chat` (see [errors.md](errors.md)), just
-  authenticated by the publishable key and restricted to allowed origins
-  instead of a secret key.
+- Every message goes to `POST /widget/chat` — the same SSE framing as
+  `POST /v1/chat` (see [errors.md](errors.md)), authenticated by the
+  publishable key and restricted to allowed origins instead of a secret
+  key, but with a narrower event set: only `token`, `done`, and `error`
+  are streamed. `/v1/chat`'s `sources` and `tool_call` events are
+  withheld here, since they carry verbatim document content and raw
+  custom-tool responses that aren't meant for public display.
 - CORS is configured per-request based on your tenant's allowed origins,
   but that's only what lets a browser *read* the response. The same
   `Origin` header is also checked server-side on every request,

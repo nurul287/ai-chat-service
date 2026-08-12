@@ -146,3 +146,37 @@ describe("/v1 routes reject publishable keys", () => {
     expect(res.statusCode).toBe(401);
   });
 });
+
+describe("CORS delegator path-boundary", () => {
+  it("does not give a /widget-lookalike path the per-tenant CORS treatment", async () => {
+    const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+
+    // A plain `startsWith("/widget")` check would incorrectly match this —
+    // it starts with the same characters as "/widget" but is not "/widget"
+    // itself or anything nested under it. No route needs to exist at this
+    // path: the CORS delegator runs on every request regardless of whether
+    // it ultimately 404s, so this only exercises the delegator's routing
+    // logic, not real route matching.
+    const res = await app.inject({
+      method: "GET",
+      url: "/widget-lookalike",
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com" },
+    });
+
+    expect(res.headers["access-control-allow-origin"]).not.toBe("https://acme.com");
+    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("does not give a /widgets path the per-tenant CORS treatment", async () => {
+    const { key } = await tenantWithPublishableKey("acme", ["https://acme.com"]);
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/widgets",
+      headers: { authorization: `Bearer ${key}`, origin: "https://acme.com" },
+    });
+
+    expect(res.headers["access-control-allow-origin"]).not.toBe("https://acme.com");
+    expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+});

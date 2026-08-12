@@ -66,7 +66,12 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
   // assertion, which is the one that would catch this regressing).
   void app.register(fastifyCors, {
     delegator: async (request: FastifyRequest) => {
-      if (!request.url.startsWith("/widget")) {
+      // A plain `startsWith("/widget")` would also match a future sibling
+      // route like `/widget-preview` or `/widgets` — anything merely
+      // starting with the same characters, not just this prefix. Requiring
+      // an exact match or a `/` segment boundary keeps this branch scoped
+      // to `/widget` itself and paths actually nested under it.
+      if (request.url !== "/widget" && !request.url.startsWith("/widget/")) {
         return { origin: false };
       }
 

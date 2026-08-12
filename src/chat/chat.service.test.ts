@@ -256,6 +256,32 @@ describe("runChat", () => {
     expect(currentUserMessageCount).toBe(1);
   });
 
+  it("falls back to a placeholder instead of persisting an empty assistant message when the model returns no text", async () => {
+    const { getConversation, appendMessage } = await import("./conversations.service");
+    const { streamText } = await import("ai");
+    vi.mocked(getConversation).mockResolvedValue({ id: "conv-1" } as never);
+    vi.mocked(appendMessage).mockResolvedValue({ id: "msg-1" } as never);
+    // No text-delta at all: reachable when the model spends every step on
+    // tool calls and MAX_TOOL_LOOP_STEPS cuts the loop off before any reply.
+    vi.mocked(streamText).mockReturnValue(fakeResult([{ type: "finish", totalUsage: {} }]) as never);
+
+    const { runChat } = await import("./chat.service");
+    const events = await collect(
+      runChat({ tenantId: "t1", externalUserId: "u1", conversationId: "conv-1", message: "hi" }),
+    );
+
+    const assistantCall = vi.mocked(appendMessage).mock.calls.find((call) => call[2] === "assistant");
+    expect(assistantCall?.[3]).toBeTruthy();
+
+    // What the client saw live must match what got persisted, so reloading
+    // history later doesn't show different text than the stream did.
+    const tokenText = events
+      .filter((e): e is { event: "token"; data: { text: string } } => e.event === "token")
+      .map((e) => e.data.text)
+      .join("");
+    expect(tokenText).toBe(assistantCall?.[3]);
+  });
+
   it("records metrics including OpenRouter's cost from finalStep.providerMetadata", async () => {
     const { getConversation, appendMessage } = await import("./conversations.service");
     const { recordChatMetrics } = await import("./chat-metrics.service");

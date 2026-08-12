@@ -35,6 +35,16 @@ const baseConfigSchema = z.object({
   TOOL_SECRETS_ENCRYPTION_KEY: z
     .string()
     .regex(/^[0-9a-f]{64}$/i, "must be a 64-character hex string (32 bytes)"),
+  // Used by src/lib/supabase.ts to verify a dashboard session token via
+  // supabase-js's auth.getUser() — never a service-role secret, just the
+  // project's public anon key.
+  SUPABASE_URL: z.string().url("SUPABASE_URL must be a valid URL"),
+  SUPABASE_ANON_KEY: z.string().min(1, "SUPABASE_ANON_KEY is required"),
+  // The deployed dashboard's origin, allowed through CORS on /dashboard/*
+  // (see src/app.ts's CORS delegator). Optional because local development
+  // without a dashboard running yet is a valid state — that branch also
+  // always allows http://localhost:5173 outside production.
+  DASHBOARD_URL: z.string().url("DASHBOARD_URL must be a valid URL").optional(),
 });
 
 const configSchema = baseConfigSchema.superRefine((data, ctx) => {

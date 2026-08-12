@@ -19,13 +19,20 @@ them.
 > you have pushed. Server-side only — your backend calls this service, your
 > frontend calls your backend.
 >
-> CORS is deliberately disabled on this service, so a browser cannot call it
-> cross-origin even if a key leaks into frontend code. Treat that as a
-> backstop, not permission.
+> CORS is deliberately disabled for `/v1/*` (secret-key) routes, so a browser
+> cannot call them cross-origin even if a key leaks into frontend code. Treat
+> that as a backstop, not permission. The embeddable widget's `/widget/*`
+> routes are the one deliberate exception — see below.
 
-Browser-safe **publishable keys**, with a per-tenant domain allowlist and no
-write access, arrive in Sprint 4 alongside the embeddable widget. Until then
-there is no supported way to call this API from a browser.
+## Publishable keys
+
+Sprint 4 adds a second key type, `pk_live_…`, for the [embeddable
+widget](embeddable-widget.md). Unlike the secret keys above, a publishable
+key is meant to be public — it's restricted by a per-tenant domain
+allowlist instead of by secrecy, and it cannot access any `/v1/*` route
+(documents, search, tools, or the secret-key chat endpoint). See
+[embeddable-widget.md](embeddable-widget.md) for the full explanation and
+setup steps.
 
 ## Storage
 

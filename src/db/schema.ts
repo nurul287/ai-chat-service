@@ -18,6 +18,7 @@ export const tenants = pgTable("tenants", {
   id: uuid().defaultRandom().primaryKey().notNull(),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  allowedOrigins: jsonb("allowed_origins").default([]).notNull().$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
 });
@@ -30,6 +31,7 @@ export const apiKeys = pgTable(
       .notNull()
       .references(() => tenants.id, { onDelete: "cascade" }),
     name: text().notNull(),
+    kind: text().notNull().default("secret").$type<"secret" | "publishable">(),
     keyPrefix: text("key_prefix").notNull(),
     keyHash: text("key_hash").notNull().unique(),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true, mode: "string" }),
@@ -38,7 +40,10 @@ export const apiKeys = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [index("idx_api_keys_tenant").on(table.tenantId)],
+  (table) => [
+    index("idx_api_keys_tenant").on(table.tenantId),
+    check("api_keys_kind_check", sql`${table.kind} in ('secret', 'publishable')`),
+  ],
 );
 
 export const documents = pgTable(

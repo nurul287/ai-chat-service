@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "./app";
 
@@ -84,5 +86,50 @@ describe("security headers", () => {
     await app.close();
 
     expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("overrides helmet's default same-origin CORP so GET /widget.js can be loaded cross-origin", async () => {
+    // Not asserted by CI having previously run `pnpm build:widget` — this
+    // route reads widget-dist/widget.js lazily (see getWidgetScript's
+    // comment in app.ts), and CI's `pnpm test` step never builds it. Built
+    // here so this test is self-contained regardless of what ran before it.
+    if (!existsSync("widget-dist/widget.js")) {
+      await build({
+        entryPoints: ["widget/src/index.ts"],
+        bundle: true,
+        format: "iife",
+        target: "es2020",
+        outfile: "widget-dist/widget.js",
+      });
+    }
+
+    const app = buildApp({ logger: false });
+
+    const res = await app.inject({ method: "GET", url: "/widget.js" });
+    await app.close();
+
+    // helmet's global default is "same-origin", which a real browser
+    // enforces even for a <script src> load — exactly the case this route
+    // exists for (a tenant embeds this script from THEIR origin, never
+    // this service's own). Without the per-route override this asserts,
+    // the widget could never actually be embedded anywhere.
+    expect(res.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+  });
+
+  it("scopes that CORP relaxation to /widget.js alone — every other route keeps helmet's same-origin", async () => {
+    const app = buildApp({ logger: false });
+
+    // The negative half of the test above. `cross-origin` CORP is what
+    // lets any site read a response, so the relaxation leaking past
+    // /widget.js — a route-level `.header()` accidentally becoming an
+    // app-wide hook, say — would silently widen the entire API. Checked
+    // on two unrelated routes rather than one, so a single-route fluke
+    // can't pass it.
+    const health = await app.inject({ method: "GET", url: "/health" });
+    const spec = await app.inject({ method: "GET", url: "/openapi.json" });
+    await app.close();
+
+    expect(health.headers["cross-origin-resource-policy"]).toBe("same-origin");
+    expect(spec.headers["cross-origin-resource-policy"]).toBe("same-origin");
   });
 });

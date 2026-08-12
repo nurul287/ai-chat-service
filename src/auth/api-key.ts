@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-const KEY_PREFIX = "sk_live_";
+const KEY_PREFIXES = { secret: "sk_live_", publishable: "pk_live_" } as const;
 const PREFIX_LENGTH = 12;
 
 /**
@@ -14,8 +14,10 @@ export function hashApiKey(plaintext: string): string {
   return createHash("sha256").update(plaintext).digest("hex");
 }
 
-export function generateApiKey(): { plaintext: string; prefix: string; hash: string } {
-  const plaintext = `${KEY_PREFIX}${randomBytes(32).toString("base64url")}`;
+export function generateApiKey(
+  kind: "secret" | "publishable" = "secret",
+): { plaintext: string; prefix: string; hash: string } {
+  const plaintext = `${KEY_PREFIXES[kind]}${randomBytes(32).toString("base64url")}`;
   return {
     plaintext,
     prefix: plaintext.slice(0, PREFIX_LENGTH),

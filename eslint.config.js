@@ -3,15 +3,22 @@ const tseslint = require("typescript-eslint");
 const prettier = require("eslint-config-prettier");
 
 module.exports = tseslint.config(
-  { ignores: ["dist/**", "node_modules/**", "supabase/**", "examples/**"] },
+  {
+    // widget-dist/ is esbuild's bundled output (gitignored, same category as
+    // dist/) — it's generated JS, not source, and should never be linted.
+    ignores: ["dist/**", "node_modules/**", "supabase/**", "examples/**", "widget-dist/**"],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
     languageOptions: {
       parserOptions: {
-        // vitest.config.ts sits outside `src`, so it is not in tsconfig's
-        // `include` — this lets the type-aware rules still lint it.
-        projectService: { allowDefaultProject: ["vitest.config.ts", "drizzle.config.ts"] },
+        // vitest.config.ts and widget/build.mjs both sit outside any
+        // tsconfig's `include` (build.mjs is a standalone esbuild script, not
+        // part of the widget/tsconfig.json program below) — this lets the
+        // type-aware rules still lint them via TS's single-file default
+        // project rather than erroring that no project covers them.
+        projectService: { allowDefaultProject: ["vitest.config.ts", "drizzle.config.ts", "widget/build.mjs"] },
         tsconfigRootDir: __dirname,
       },
     },
@@ -33,6 +40,16 @@ module.exports = tseslint.config(
       // (last_used_at telemetry, deferred plugin registration), and each site
       // marks itself with `void`. An unmarked floating promise is a bug.
       "@typescript-eslint/no-floating-promises": "error",
+    },
+  },
+  {
+    // build.mjs is a standalone Node script (not covered by any tsconfig's
+    // `include`, hence the allowDefaultProject entry above) — its default
+    // single-file TS program has no Node types acquired, so `process` and
+    // `console` read as undefined to ESLint's scope analysis without this.
+    files: ["widget/build.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly" },
     },
   },
   {

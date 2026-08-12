@@ -250,6 +250,10 @@ API_KEY=sk_live_... BASE_URL=https://<your-domain> node examples/node/index.js
       limiting and no per-tenant quota until Sprint 6 — the service is
       single-tenant-by-trust, and an abusive or buggy caller can run up your
       Voyage bill without limit.
+- [ ] **Weigh that same gap before embedding the widget on a public page.**
+      A published `pk_live_…` key is visible in the page source, so until
+      Sprint 6 lands quotas the missing rate limit is exposed not just to
+      trusted tenants but to anyone on the internet who finds the script tag.
 - [ ] Set a **spend alert** on your Voyage account.
 - [ ] Consider enabling Supabase **Point-in-Time Recovery** if the corpus
       becomes hard to rebuild. The free tier keeps daily backups only.

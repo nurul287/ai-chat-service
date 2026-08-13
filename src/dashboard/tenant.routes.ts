@@ -86,13 +86,17 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
           const issuedKey = await issueApiKey(createdTenant.id, "default", "secret", tx);
           return [createdTenant, issuedKey] as const;
         });
-      } catch {
+      } catch (err) {
         // Either the slug is already taken, a concurrent signup for this
         // same user won the owner_user_id unique constraint, or the key
         // insert failed and rolled the tenant insert back with it — all
         // surface here as a failed transaction, and 409 is the right
         // status for any of those root causes without needing to parse
-        // the DB error.
+        // the DB error. The error is still logged, though: a dropped DB
+        // connection or a pool timeout would otherwise look identical to
+        // "slug taken" in every log line, making a real outage
+        // undiagnosable.
+        request.log.error({ err }, "dashboard signup failed");
         return reply.code(409).send({
           error: {
             code: "conflict",

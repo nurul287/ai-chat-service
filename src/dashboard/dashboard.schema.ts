@@ -62,3 +62,22 @@ export const mintPublishableKeyResponse = z.object({
   plaintext: z.string().describe("Shown exactly once — store it now, it cannot be retrieved again."),
   prefix: z.string(),
 });
+
+export const usageQuery = z.object({
+  days: z.coerce.number().int().positive().max(365).default(30),
+});
+
+export const usagePoint = z.object({
+  date: z.string(),
+  messages: z.number(),
+  tokens: z.number(),
+});
+
+export const usageResponse = z.object({
+  data: z.array(usagePoint),
+  totals: z.object({
+    conversations: z.number(),
+    messages: z.number(),
+    tokens: z.number(),
+  }),
+});

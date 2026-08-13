@@ -19,8 +19,10 @@ export const tenantResponse = z.object({
 export const signupResponse = z.object({
   tenant: tenantResponse,
   apiKey: z.object({
+    id: z.string(),
+    name: z.string(),
+    keyPrefix: z.string(),
     plaintext: z.string().describe("Shown exactly once — store it now, it cannot be retrieved again."),
-    prefix: z.string(),
   }),
 });
 
@@ -50,7 +52,7 @@ export const revokeKeyParams = z.object({
 
 export const widgetConfigResponse = z.object({
   allowedOrigins: z.array(z.string()),
-  publishableKeyPrefix: z.string().nullable(),
+  keyPrefix: z.string().nullable(),
   hasPublishableKey: z.boolean(),
 });
 
@@ -69,7 +71,7 @@ export const setOriginsBody = z.object({
 
 export const mintPublishableKeyResponse = z.object({
   plaintext: z.string().describe("Shown exactly once — store it now, it cannot be retrieved again."),
-  prefix: z.string(),
+  keyPrefix: z.string(),
 });
 
 export const usageQuery = z.object({

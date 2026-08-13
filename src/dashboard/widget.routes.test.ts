@@ -42,7 +42,7 @@ describe("dashboard widget-config routes", () => {
 
     expect(res.statusCode).toBe(200);
     expect(res.json().data.allowedOrigins).toEqual([]);
-    expect(res.json().data.publishableKeyPrefix).toBeNull();
+    expect(res.json().data.keyPrefix).toBeNull();
     expect(res.json().data.hasPublishableKey).toBe(false);
   });
 
@@ -99,6 +99,6 @@ describe("dashboard widget-config routes", () => {
     expect(mint.json().data.plaintext).toMatch(/^pk_live_/);
 
     const get = await app.inject({ method: "GET", url: "/dashboard/widget", headers: auth("00000000-0000-0000-0000-000000000001") });
-    expect(get.json().data.publishableKeyPrefix).toBe(mint.json().data.prefix);
+    expect(get.json().data.keyPrefix).toBe(mint.json().data.keyPrefix);
   });
 });

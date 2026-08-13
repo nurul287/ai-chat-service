@@ -66,7 +66,7 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       let tenant: Tenant;
-      let apiKey: { plaintext: string; prefix: string };
+      let issuedKey: { id: string; plaintext: string; prefix: string };
       try {
         // Both inserts run inside one transaction so they succeed or fail
         // together — without this, an error from issueApiKey after
@@ -74,7 +74,7 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
         // tenant and no key, and every future signup attempt would then
         // hit the getTenantByOwnerUserId pre-check above and 409
         // permanently, with no self-service recovery path.
-        [tenant, apiKey] = await db.transaction(async (tx) => {
+        [tenant, issuedKey] = await db.transaction(async (tx) => {
           const createdTenant = await createTenant(
             {
               name: request.body.tenantName,
@@ -83,8 +83,8 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
             },
             tx,
           );
-          const issuedKey = await issueApiKey(createdTenant.id, "default", "secret", tx);
-          return [createdTenant, issuedKey] as const;
+          const key = await issueApiKey(createdTenant.id, "default", "secret", tx);
+          return [createdTenant, key] as const;
         });
       } catch (err) {
         // Either the slug is already taken, a concurrent signup for this
@@ -106,7 +106,15 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       return reply.code(200).send({
-        data: { tenant: toPublicTenant(tenant), apiKey },
+        data: {
+          tenant: toPublicTenant(tenant),
+          apiKey: {
+            id: issuedKey.id,
+            name: "default",
+            keyPrefix: issuedKey.prefix,
+            plaintext: issuedKey.plaintext,
+          },
+        },
       });
     },
   );

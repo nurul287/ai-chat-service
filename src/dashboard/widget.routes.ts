@@ -40,12 +40,12 @@ const dashboardWidgetRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      const publishableKeyPrefix = await currentPublishableKeyPrefix(request.tenant!.id);
+      const keyPrefix = await currentPublishableKeyPrefix(request.tenant!.id);
       return reply.code(200).send({
         data: {
           allowedOrigins: request.tenant!.allowedOrigins,
-          publishableKeyPrefix,
-          hasPublishableKey: publishableKeyPrefix !== null,
+          keyPrefix,
+          hasPublishableKey: keyPrefix !== null,
         },
       });
     },
@@ -88,7 +88,7 @@ const dashboardWidgetRoutes: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       const { plaintext, prefix } = await issueApiKey(request.tenant!.id, "widget", "publishable");
-      return reply.code(200).send({ data: { plaintext, prefix } });
+      return reply.code(200).send({ data: { plaintext, keyPrefix: prefix } });
     },
   );
 };

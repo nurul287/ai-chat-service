@@ -16,7 +16,7 @@ import {
 
 /** Explicit mapping rather than relying on Zod stripping unknown keys — the
  *  omission of tenantId is a contract decision, not a serializer side effect. */
-function toPublicDocument(doc: Document) {
+export function toPublicDocument(doc: Document) {
   return {
     id: doc.id,
     externalId: doc.externalId,
@@ -35,7 +35,7 @@ function toPublicDocument(doc: Document) {
  * published contract, so they are normalised here rather than leaking the
  * driver's wire format to every caller.
  */
-function toIso(timestamp: string): string {
+export function toIso(timestamp: string): string {
   return new Date(timestamp).toISOString();
 }
 

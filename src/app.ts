@@ -23,6 +23,7 @@ import chatRoutes from "./chat/chat.routes";
 import tenantRoutes from "./dashboard/tenant.routes";
 import dashboardDocumentsRoutes from "./dashboard/documents.routes";
 import dashboardKeysRoutes from "./dashboard/keys.routes";
+import dashboardWidgetRoutes from "./dashboard/widget.routes";
 import documentsRoutes from "./documents/documents.routes";
 import { defaultLogger } from "./lib/logger";
 import authPlugin from "./plugins/auth";
@@ -235,6 +236,7 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
       await dashboard.register(tenantRoutes);
       await dashboard.register(dashboardDocumentsRoutes);
       await dashboard.register(dashboardKeysRoutes);
+      await dashboard.register(dashboardWidgetRoutes);
     },
     { prefix: "/dashboard" },
   );

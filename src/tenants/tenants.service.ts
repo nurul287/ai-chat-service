@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
 import { apiKeys, tenants, type Tenant } from "../db/schema";
 import { generateApiKey, hashApiKey } from "../auth/api-key";
@@ -80,7 +80,8 @@ export async function listApiKeys(tenantId: string): Promise<
       createdAt: apiKeys.createdAt,
     })
     .from(apiKeys)
-    .where(and(eq(apiKeys.tenantId, tenantId), eq(apiKeys.kind, "secret")));
+    .where(and(eq(apiKeys.tenantId, tenantId), eq(apiKeys.kind, "secret")))
+    .orderBy(desc(apiKeys.createdAt));
 }
 
 export async function verifyApiKey(plaintext: string): Promise<Tenant | null> {

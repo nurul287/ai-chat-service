@@ -26,7 +26,8 @@ cannot be retrieved again (see [authentication.md](authentication.md)).
 |---|---|---|
 | `GET` | `/dashboard/tenant` | The tenant owned by the authenticated account. 404 before signup. |
 | `POST` | `/dashboard/signup` | Create the tenant + mint its first secret key. 409 if one already exists. |
-| `GET` / `PUT` / `DELETE` | `/dashboard/documents` | Same behavior as `/v1/documents`, dashboard-session authenticated. |
+| `GET` / `PUT` | `/dashboard/documents` | Same behavior as `/v1/documents`, dashboard-session authenticated. |
+| `DELETE` | `/dashboard/documents/:externalId` | Same behavior as `/v1/documents`, dashboard-session authenticated. |
 | `GET` | `/dashboard/keys` | List this tenant's secret keys (never the raw key). |
 | `POST` | `/dashboard/keys` | Issue a new named secret key. |
 | `DELETE` | `/dashboard/keys/:id` | Revoke a secret key. |

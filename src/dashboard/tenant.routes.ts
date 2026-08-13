@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { db } from "../db";
 import type { Tenant } from "../db/schema";
 import { errorResponse } from "../documents/documents.schema";
 import { createTenant, getTenantByOwnerUserId, issueApiKey } from "../tenants/tenants.service";
@@ -65,17 +66,33 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       let tenant: Tenant;
+      let apiKey: { plaintext: string; prefix: string };
       try {
-        tenant = await createTenant({
-          name: request.body.tenantName,
-          slug: request.body.tenantSlug,
-          ownerUserId: request.dashboardUserId!,
+        // Both inserts run inside one transaction so they succeed or fail
+        // together — without this, an error from issueApiKey after
+        // createTenant already committed would strand the caller with a
+        // tenant and no key, and every future signup attempt would then
+        // hit the getTenantByOwnerUserId pre-check above and 409
+        // permanently, with no self-service recovery path.
+        [tenant, apiKey] = await db.transaction(async (tx) => {
+          const createdTenant = await createTenant(
+            {
+              name: request.body.tenantName,
+              slug: request.body.tenantSlug,
+              ownerUserId: request.dashboardUserId!,
+            },
+            tx,
+          );
+          const issuedKey = await issueApiKey(createdTenant.id, "default", "secret", tx);
+          return [createdTenant, issuedKey] as const;
         });
       } catch {
-        // Either the slug is already taken, or a concurrent signup for this
-        // same user won the owner_user_id unique constraint — both surface
-        // here as an insert failure, and 409 is the right status for
-        // either root cause without needing to parse the DB error.
+        // Either the slug is already taken, a concurrent signup for this
+        // same user won the owner_user_id unique constraint, or the key
+        // insert failed and rolled the tenant insert back with it — all
+        // surface here as a failed transaction, and 409 is the right
+        // status for any of those root causes without needing to parse
+        // the DB error.
         return reply.code(409).send({
           error: {
             code: "conflict",
@@ -84,9 +101,8 @@ const tenantRoutes: FastifyPluginAsync = async (fastify) => {
         });
       }
 
-      const { plaintext, prefix } = await issueApiKey(tenant.id, "default");
       return reply.code(200).send({
-        data: { tenant: toPublicTenant(tenant), apiKey: { plaintext, prefix } },
+        data: { tenant: toPublicTenant(tenant), apiKey },
       });
     },
   );

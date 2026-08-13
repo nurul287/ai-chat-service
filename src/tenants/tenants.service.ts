@@ -3,12 +3,27 @@ import { db } from "../db";
 import { apiKeys, tenants, type Tenant } from "../db/schema";
 import { generateApiKey, hashApiKey } from "../auth/api-key";
 
-export async function createTenant(input: {
-  name: string;
-  slug: string;
-  ownerUserId?: string;
-}): Promise<Tenant> {
-  const [tenant] = await db.insert(tenants).values(input).returning();
+/**
+ * The query-builder surface shared by the module-level `db` singleton and
+ * a `tx` handle handed to a `db.transaction()` callback. Deliberately
+ * `Pick`ed down to just these four methods rather than `typeof db`: the
+ * full `db` type also carries `$client` (the underlying postgres.js
+ * connection) and `transaction` itself, neither of which a `tx` object
+ * has — a transaction cannot nest another transaction through this same
+ * client. A function typed against this narrower surface runs identically
+ * whether it's handed `db` directly or a `tx` from a caller's transaction.
+ */
+type DbClient = Pick<typeof db, "insert" | "select" | "update" | "delete">;
+
+export async function createTenant(
+  input: {
+    name: string;
+    slug: string;
+    ownerUserId?: string;
+  },
+  dbHandle: DbClient = db,
+): Promise<Tenant> {
+  const [tenant] = await dbHandle.insert(tenants).values(input).returning();
   return tenant!;
 }
 
@@ -38,9 +53,10 @@ export async function issueApiKey(
   tenantId: string,
   name: string,
   kind: "secret" | "publishable" = "secret",
+  dbHandle: DbClient = db,
 ): Promise<{ plaintext: string; prefix: string }> {
   const { plaintext, prefix, hash } = generateApiKey(kind);
-  await db.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind });
+  await dbHandle.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind });
   return { plaintext, prefix };
 }
 

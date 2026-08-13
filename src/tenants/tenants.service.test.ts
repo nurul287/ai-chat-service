@@ -182,6 +182,38 @@ describe("listApiKeys", () => {
   });
 });
 
+describe("createTenant / issueApiKey — transaction handle (dbHandle) support", () => {
+  it("commits both inserts together when run inside one caller-supplied transaction", async () => {
+    const [tenant, key] = await db.transaction(async (tx) => {
+      const t = await createTenant({ name: "TxCo", slug: "tx-co" }, tx);
+      const k = await issueApiKey(t.id, "default", "secret", tx);
+      return [t, k] as const;
+    });
+
+    expect(tenant.slug).toBe("tx-co");
+    expect((await verifyApiKey(key.plaintext))?.id).toBe(tenant.id);
+  });
+
+  it("rolls back the tenant insert too when the key insert fails inside the same transaction", async () => {
+    // A deliberately invalid `kind` — cast past the type system, since the
+    // real signature only allows "secret" | "publishable" — violates the
+    // api_keys_kind_check constraint on the second insert. This is a real
+    // Postgres-level failure, not a mocked one, and it's the exact failure
+    // mode POST /dashboard/signup's transaction guards against: if the
+    // second insert fails after the first already ran, both statements
+    // must roll back together, or a caller would be left with a tenant and
+    // no key, and no self-service way to recover.
+    await expect(
+      db.transaction(async (tx) => {
+        const t = await createTenant({ name: "Orphan Co", slug: "orphan-co" }, tx);
+        await issueApiKey(t.id, "default", "not-a-real-kind" as unknown as "secret", tx);
+      }),
+    ).rejects.toThrow();
+
+    expect(await getTenantBySlug("orphan-co")).toBeNull();
+  });
+});
+
 describe("revokeApiKey (tenant-scoped)", () => {
   it("revokes a key belonging to the tenant and returns true", async () => {
     const tenant = await createTenant({ name: "Acme", slug: "acme" });

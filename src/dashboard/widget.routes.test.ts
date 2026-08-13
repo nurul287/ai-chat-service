@@ -74,6 +74,28 @@ describe("dashboard widget-config routes", () => {
     expect(put.statusCode).toBe(400);
   });
 
+  it("rejects a non-URL origin with a clean 400, not a 500", async () => {
+    // Regression test: setOriginsBody's .refine() calls `new URL(v)` on
+    // the same value .url() already rejected — Zod 4 does not
+    // short-circuit a chained .refine() after a prior check fails. A
+    // scheme-less string like "acme.com" makes `new URL(v)` throw a raw
+    // TypeError, which fastify-type-provider-zod's safeParse() does not
+    // catch, previously surfacing as an unauthenticated 500 (schema
+    // validation runs before dashboardAuthPlugin's own preHandler, so
+    // this path doesn't even require a valid token).
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+
+    const put = await app.inject({
+      method: "PUT",
+      url: "/dashboard/widget/origins",
+      headers: auth("00000000-0000-0000-0000-000000000001"),
+      payload: { origins: ["acme.com"] },
+    });
+
+    expect(put.statusCode).toBe(400);
+    expect(put.json().error.code).toBe("invalid_request");
+  });
+
   it("accepts a bare origin", async () => {
     await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 

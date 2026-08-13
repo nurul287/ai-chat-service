@@ -62,9 +62,26 @@ export const setOriginsBody = z.object({
       z
         .string()
         .url()
-        .refine((v) => new URL(v).origin === v, {
-          message: "must be a bare origin with no path or trailing slash, e.g. https://acme.com",
-        }),
+        .refine(
+          (v) => {
+            // Zod 4 does NOT short-circuit this refine when the preceding
+            // .url() check already failed — both run on the same value
+            // regardless. `new URL(v)` throws a raw TypeError for a
+            // non-URL string (no scheme, empty string, etc.), and
+            // fastify-type-provider-zod's safeParse() does not catch an
+            // exception thrown from inside a refinement, so an uncaught
+            // throw here reaches the app's global error handler as an
+            // unauthenticated 500 (schema validation runs before any
+            // preHandler, including the bearer-token check) instead of a
+            // clean 400. Must catch and return false, never throw.
+            try {
+              return new URL(v).origin === v;
+            } catch {
+              return false;
+            }
+          },
+          { message: "must be a bare origin with no path or trailing slash, e.g. https://acme.com" },
+        ),
     )
     .max(50),
 });

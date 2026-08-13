@@ -45,12 +45,13 @@ describe("dashboard key routes", () => {
       payload: { name: "production" },
     });
     expect(create.statusCode).toBe(200);
-    expect(create.json().data.plaintext).toMatch(/^sk_live_/);
+    const plaintext = create.json().data.plaintext as string;
+    expect(plaintext).toMatch(/^sk_live_/);
     const keyId = create.json().data.id as string;
 
     const list = await app.inject({ method: "GET", url: "/dashboard/keys", headers: auth("00000000-0000-0000-0000-000000000001") });
     expect(list.json().data.some((k: { name: string }) => k.name === "production")).toBe(true);
-    expect(JSON.stringify(list.json())).not.toContain("sk_live_");
+    expect(JSON.stringify(list.json())).not.toContain(plaintext);
 
     const revoke = await app.inject({
       method: "DELETE",
@@ -78,5 +79,27 @@ describe("dashboard key routes", () => {
       headers: auth("00000000-0000-0000-0000-00000000000b"),
     });
     expect(revoke.statusCode).toBe(404);
+  });
+
+  it("lists only secret keys, not publishable keys", async () => {
+    const { issueApiKey } = await import("../tenants/tenants.service");
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+    const tenant = await import("../tenants/tenants.service").then((m) =>
+      m.getTenantByOwnerUserId("00000000-0000-0000-0000-000000000001"),
+    );
+
+    // Issue one secret key and one publishable key
+    await issueApiKey(tenant!.id, "secret-key", "secret");
+    await issueApiKey(tenant!.id, "publishable-key", "publishable");
+
+    const list = await app.inject({
+      method: "GET",
+      url: "/dashboard/keys",
+      headers: auth("00000000-0000-0000-0000-000000000001"),
+    });
+    expect(list.statusCode).toBe(200);
+    const keys = list.json().data as Array<{ name: string }>;
+    expect(keys.some((k) => k.name === "secret-key")).toBe(true);
+    expect(keys.some((k) => k.name === "publishable-key")).toBe(false);
   });
 });

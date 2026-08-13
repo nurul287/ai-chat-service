@@ -54,10 +54,10 @@ export async function issueApiKey(
   name: string,
   kind: "secret" | "publishable" = "secret",
   dbHandle: DbClient = db,
-): Promise<{ plaintext: string; prefix: string }> {
+): Promise<{ id: string; plaintext: string; prefix: string }> {
   const { plaintext, prefix, hash } = generateApiKey(kind);
-  await dbHandle.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind });
-  return { plaintext, prefix };
+  const [inserted] = await dbHandle.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind }).returning({ id: apiKeys.id });
+  return { id: inserted!.id, plaintext, prefix };
 }
 
 export async function listApiKeys(tenantId: string): Promise<
@@ -80,7 +80,7 @@ export async function listApiKeys(tenantId: string): Promise<
       createdAt: apiKeys.createdAt,
     })
     .from(apiKeys)
-    .where(eq(apiKeys.tenantId, tenantId));
+    .where(and(eq(apiKeys.tenantId, tenantId), eq(apiKeys.kind, "secret")));
 }
 
 export async function verifyApiKey(plaintext: string): Promise<Tenant | null> {

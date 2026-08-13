@@ -31,7 +31,7 @@ const dashboardKeysRoutes: FastifyPluginAsync = async (fastify) => {
         data: keys.map((k) => ({
           id: k.id,
           name: k.name,
-          keyPrefix: k.keyPrefix.slice("sk_live_".length),
+          keyPrefix: k.keyPrefix,
           lastUsedAt: toIso(k.lastUsedAt),
           revokedAt: toIso(k.revokedAt),
           createdAt: toIso(k.createdAt)!,
@@ -54,13 +54,10 @@ const dashboardKeysRoutes: FastifyPluginAsync = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // issueApiKey only returns { plaintext, prefix } — not the row's id —
-      // so the created row is looked up by its (unique) prefix afterwards.
-      const { plaintext, prefix } = await issueApiKey(request.tenant!.id, request.body.name);
-      const [created] = (await listApiKeys(request.tenant!.id)).filter((k) => k.keyPrefix === prefix);
+      const { id, plaintext, prefix } = await issueApiKey(request.tenant!.id, request.body.name);
       return reply
         .code(200)
-        .send({ data: { id: created!.id, name: request.body.name, keyPrefix: prefix, plaintext } });
+        .send({ data: { id, name: request.body.name, keyPrefix: prefix, plaintext } });
     },
   );
 

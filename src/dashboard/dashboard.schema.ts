@@ -23,3 +23,27 @@ export const signupResponse = z.object({
     prefix: z.string(),
   }),
 });
+
+export const apiKeyResponse = z.object({
+  id: z.string(),
+  name: z.string(),
+  keyPrefix: z.string(),
+  lastUsedAt: z.string().nullable(),
+  revokedAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export const createKeyBody = z.object({
+  name: z.string().min(1).max(255),
+});
+
+export const createKeyResponse = z.object({
+  id: z.string(),
+  name: z.string(),
+  keyPrefix: z.string(),
+  plaintext: z.string().describe("Shown exactly once — store it now, it cannot be retrieved again."),
+});
+
+export const revokeKeyParams = z.object({
+  id: z.string().uuid(),
+});

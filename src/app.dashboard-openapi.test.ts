@@ -23,7 +23,7 @@ const NO_TENANT_REQUIRED = new Set(["GET /dashboard/tenant", "POST /dashboard/si
  * Values are arbitrary but schema-valid — this sweep only cares whether
  * request.tenant gets resolved, never what these routes actually do.
  */
-const ROUTE_FIXTURES: Record<string, { payload?: unknown; params?: Record<string, string> }> = {
+const ROUTE_FIXTURES: Record<string, { payload?: Record<string, unknown>; params?: Record<string, string> }> = {
   "PUT /dashboard/documents": { payload: { externalId: "sweep-doc", content: "sweep content" } },
   "DELETE /dashboard/documents/:externalId": { params: { externalId: "sweep-doc" } },
   "POST /dashboard/keys": { payload: { name: "sweep-key" } },

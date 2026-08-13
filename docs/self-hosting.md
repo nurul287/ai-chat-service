@@ -24,6 +24,9 @@
 | `OPENROUTER_API_KEY`    | conditional | —            | Required when `CHAT_MODEL_PROVIDER=openrouter` (the default) |
 | `ANTHROPIC_API_KEY`     | conditional | —            | Required when `CHAT_MODEL_PROVIDER=anthropic`                |
 | `TOOL_SECRETS_ENCRYPTION_KEY` | yes   | —            | **64 hex characters (32 bytes).** Encrypts custom-tool secrets at rest — see below |
+| `SUPABASE_URL`           | yes      | —             | Supabase project URL. Used by `src/lib/supabase.ts` to verify a dashboard session token via `auth.getUser()`. |
+| `SUPABASE_ANON_KEY`      | yes      | —             | Supabase project's public anon key — never a service-role secret.  |
+| `DASHBOARD_URL`          | no       | —             | The deployed dashboard frontend's origin — the CORS allowlist for `/dashboard/*`. Without it, `/dashboard/*` is unreachable from any browser in production; outside production, `http://localhost:5173` is always allowed regardless of this setting. |
 
 Configuration is validated by Zod at import time, so a missing or malformed
 variable crashes the process at boot with the variable's name — never as an

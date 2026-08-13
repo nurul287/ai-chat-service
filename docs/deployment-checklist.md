@@ -133,6 +133,15 @@ Railway → your service → **Variables**:
       every custom tool's HMAC secret at rest, and changing it later makes all
       existing tool secrets permanently undecryptable — each affected tool
       then has to be revoked and re-registered with a new secret.
+- [ ] `SUPABASE_URL` — your Supabase project URL (`https://<ref>.supabase.co`).
+      Used to verify dashboard session tokens via `auth.getUser()`.
+- [ ] `SUPABASE_ANON_KEY` — your Supabase project's public anon key, from
+      **Project Settings → API**. Never the service-role key.
+- [ ] `DASHBOARD_URL` — optional, but without it `/dashboard/*` is
+      unreachable from any browser in production (the CORS allowlist for the
+      dashboard frontend's origin). Set it once the dashboard frontend has a
+      deployed URL; outside production, `http://localhost:5173` is always
+      allowed regardless of this setting.
 - [ ] `NODE_ENV` — `production`
 
 **Leave `PORT` unset for now.** Railway injects a port dynamically and the

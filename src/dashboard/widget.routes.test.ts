@@ -61,6 +61,32 @@ describe("dashboard widget-config routes", () => {
     expect(get.json().data.allowedOrigins).toEqual(["https://acme.com"]);
   });
 
+  it("rejects an origin with a trailing slash", async () => {
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+
+    const put = await app.inject({
+      method: "PUT",
+      url: "/dashboard/widget/origins",
+      headers: auth("00000000-0000-0000-0000-000000000001"),
+      payload: { origins: ["https://acme.com/"] },
+    });
+
+    expect(put.statusCode).toBe(400);
+  });
+
+  it("accepts a bare origin", async () => {
+    await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
+
+    const put = await app.inject({
+      method: "PUT",
+      url: "/dashboard/widget/origins",
+      headers: auth("00000000-0000-0000-0000-000000000001"),
+      payload: { origins: ["https://acme.com"] },
+    });
+
+    expect(put.statusCode).toBe(200);
+  });
+
   it("mints a publishable key and reflects its prefix afterwards", async () => {
     await createTenant({ name: "Acme", slug: "acme", ownerUserId: "00000000-0000-0000-0000-000000000001" });
 

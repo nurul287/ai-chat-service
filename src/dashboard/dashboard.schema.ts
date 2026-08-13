@@ -55,7 +55,16 @@ export const widgetConfigResponse = z.object({
 });
 
 export const setOriginsBody = z.object({
-  origins: z.array(z.string().url()),
+  origins: z
+    .array(
+      z
+        .string()
+        .url()
+        .refine((v) => new URL(v).origin === v, {
+          message: "must be a bare origin with no path or trailing slash, e.g. https://acme.com",
+        }),
+    )
+    .max(50),
 });
 
 export const mintPublishableKeyResponse = z.object({

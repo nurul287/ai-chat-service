@@ -1,4 +1,5 @@
 import { generateText } from "ai";
+import { trackBackgroundWork } from "../lib/background-work";
 import { getRecentMessages, updateIntentSummary } from "./conversations.service";
 import { chatModel } from "./model";
 
@@ -15,7 +16,7 @@ const SUMMARY_WINDOW = 12;
 export function maybeRefreshIntentSummary(conversationId: string, userTurnCount: number): void {
   if (userTurnCount % SUMMARY_TURN_INTERVAL !== 0) return;
 
-  void refresh(conversationId).catch(() => {});
+  trackBackgroundWork(refresh(conversationId).catch(() => {}));
 }
 
 async function refresh(conversationId: string): Promise<void> {

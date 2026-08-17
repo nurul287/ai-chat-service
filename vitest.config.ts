@@ -11,6 +11,12 @@ export default defineConfig({
     // cross-test interference — one file truncating tables while another
     // inserts. Aurevo.BE hit exactly this as FK violations.
     fileParallelism: false,
+    // Runs after every test in every file — see the file's own comment.
+    // Closes a real deadlock: several code paths write to Postgres
+    // fire-and-forget, and that write can still be in flight when the next
+    // test's cleanup issues a cascading DELETE FROM tenants, letting the
+    // two lock rows in conflicting order under CI's timing.
+    setupFiles: ["./src/test/flush-background-writes.ts"],
     globals: false,
   },
 });

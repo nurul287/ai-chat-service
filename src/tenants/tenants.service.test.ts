@@ -5,8 +5,10 @@ import { apiKeys, tenants } from "../db/schema";
 import {
   createTenant,
   flushApiKeyTouches,
+  getTenantByOwnerUserId,
   getTenantBySlug,
   issueApiKey,
+  listApiKeys,
   revokeApiKey,
   setAllowedOrigins,
   verifyApiKey,
@@ -61,7 +63,7 @@ describe("issueApiKey / verifyApiKey", () => {
     const { plaintext } = await issueApiKey(tenant.id, "default");
     const [row] = await db.select().from(apiKeys).where(eq(apiKeys.tenantId, tenant.id));
 
-    await revokeApiKey(row!.id);
+    await revokeApiKey(tenant.id, row!.id);
 
     expect(await verifyApiKey(plaintext)).toBeNull();
   });
@@ -130,5 +132,109 @@ describe("setAllowedOrigins", () => {
 
     const [row] = await db.select().from(tenants).where(eq(tenants.id, tenant.id));
     expect(row!.allowedOrigins).toEqual(["https://acme.com"]);
+  });
+});
+
+describe("createTenant with ownerUserId", () => {
+  it("stores the owner", async () => {
+    const userId = "00000000-0000-0000-0000-000000000001";
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: userId });
+    expect(tenant.ownerUserId).toBe(userId);
+  });
+
+  it("still creates a tenant with no owner (the CLI path)", async () => {
+    const tenant = await createTenant({ name: "Acme", slug: "acme" });
+    expect(tenant.ownerUserId).toBeNull();
+  });
+});
+
+describe("getTenantByOwnerUserId", () => {
+  it("returns the tenant owned by that user", async () => {
+    const userId = "00000000-0000-0000-0000-000000000001";
+    const tenant = await createTenant({ name: "Acme", slug: "acme", ownerUserId: userId });
+    expect((await getTenantByOwnerUserId(userId))?.id).toBe(tenant.id);
+  });
+
+  it("returns null when no tenant has that owner", async () => {
+    expect(await getTenantByOwnerUserId("00000000-0000-0000-0000-000000000099")).toBeNull();
+  });
+});
+
+describe("listApiKeys", () => {
+  it("lists a tenant's keys without the hash", async () => {
+    const tenant = await createTenant({ name: "Acme", slug: "acme" });
+    await issueApiKey(tenant.id, "default");
+    await issueApiKey(tenant.id, "ci");
+
+    const keys = await listApiKeys(tenant.id);
+
+    expect(keys).toHaveLength(2);
+    expect(keys.map((k) => k.name).sort()).toEqual(["ci", "default"]);
+    expect(keys[0]).not.toHaveProperty("keyHash");
+  });
+
+  it("never lists another tenant's keys", async () => {
+    const tenantA = await createTenant({ name: "A", slug: "a" });
+    const tenantB = await createTenant({ name: "B", slug: "b" });
+    await issueApiKey(tenantA.id, "default");
+
+    expect(await listApiKeys(tenantB.id)).toHaveLength(0);
+  });
+});
+
+describe("createTenant / issueApiKey — transaction handle (dbHandle) support", () => {
+  it("commits both inserts together when run inside one caller-supplied transaction", async () => {
+    const [tenant, key] = await db.transaction(async (tx) => {
+      const t = await createTenant({ name: "TxCo", slug: "tx-co" }, tx);
+      const k = await issueApiKey(t.id, "default", "secret", tx);
+      return [t, k] as const;
+    });
+
+    expect(tenant.slug).toBe("tx-co");
+    expect((await verifyApiKey(key.plaintext))?.id).toBe(tenant.id);
+  });
+
+  it("rolls back the tenant insert too when the key insert fails inside the same transaction", async () => {
+    // A deliberately invalid `kind` — cast past the type system, since the
+    // real signature only allows "secret" | "publishable" — violates the
+    // api_keys_kind_check constraint on the second insert. This is a real
+    // Postgres-level failure, not a mocked one, and it's the exact failure
+    // mode POST /dashboard/signup's transaction guards against: if the
+    // second insert fails after the first already ran, both statements
+    // must roll back together, or a caller would be left with a tenant and
+    // no key, and no self-service way to recover.
+    await expect(
+      db.transaction(async (tx) => {
+        const t = await createTenant({ name: "Orphan Co", slug: "orphan-co" }, tx);
+        await issueApiKey(t.id, "default", "not-a-real-kind" as unknown as "secret", tx);
+      }),
+    ).rejects.toThrow();
+
+    expect(await getTenantBySlug("orphan-co")).toBeNull();
+  });
+});
+
+describe("revokeApiKey (tenant-scoped)", () => {
+  it("revokes a key belonging to the tenant and returns true", async () => {
+    const tenant = await createTenant({ name: "Acme", slug: "acme" });
+    const { plaintext } = await issueApiKey(tenant.id, "default");
+    const keys = await listApiKeys(tenant.id);
+
+    const result = await revokeApiKey(tenant.id, keys[0]!.id);
+
+    expect(result).toBe(true);
+    expect(await verifyApiKey(plaintext)).toBeNull();
+  });
+
+  it("returns false and does not revoke another tenant's key", async () => {
+    const tenantA = await createTenant({ name: "A", slug: "a" });
+    const tenantB = await createTenant({ name: "B", slug: "b" });
+    const { plaintext } = await issueApiKey(tenantA.id, "default");
+    const keys = await listApiKeys(tenantA.id);
+
+    const result = await revokeApiKey(tenantB.id, keys[0]!.id);
+
+    expect(result).toBe(false);
+    expect(await verifyApiKey(plaintext)).not.toBeNull();
   });
 });

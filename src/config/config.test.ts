@@ -9,6 +9,8 @@ const valid = {
   NODE_ENV: "test",
   OPENROUTER_API_KEY: "or-test-key",
   TOOL_SECRETS_ENCRYPTION_KEY: "3eafa276356c2bcb2f139410c731b4da88aeca1b487b9544fae4b712a5d5a477",
+  SUPABASE_URL: "https://test-project.supabase.co",
+  SUPABASE_ANON_KEY: "test-anon-key",
 };
 
 describe("parseConfig", () => {
@@ -30,6 +32,11 @@ describe("parseConfig", () => {
   it("throws a readable error naming the missing variable", () => {
     const { VOYAGE_API_KEY: _k, ...rest } = valid;
     expect(() => parseConfig(rest)).toThrow(/VOYAGE_API_KEY/);
+  });
+
+  it("requires SUPABASE_URL", () => {
+    const { SUPABASE_URL: _s, ...rest } = valid;
+    expect(() => parseConfig(rest)).toThrow(/SUPABASE_URL/);
   });
 
   it("rejects an unknown NODE_ENV", () => {
@@ -64,6 +71,21 @@ describe("parseConfig", () => {
       expect(() => parseConfig({ ...valid, PUBLIC_URL: "not a url at all!!" })).toThrow(
         /PUBLIC_URL/,
       );
+    });
+  });
+
+  describe("DASHBOARD_URL", () => {
+    it("is undefined when absent", () => {
+      expect(parseConfig(valid).DASHBOARD_URL).toBeUndefined();
+    });
+
+    it("accepts a valid URL", () => {
+      const config = parseConfig({ ...valid, DASHBOARD_URL: "https://dashboard.example.com" });
+      expect(config.DASHBOARD_URL).toBe("https://dashboard.example.com");
+    });
+
+    it("rejects a non-URL value", () => {
+      expect(() => parseConfig({ ...valid, DASHBOARD_URL: "not a url" })).toThrow(/DASHBOARD_URL/);
     });
   });
 });

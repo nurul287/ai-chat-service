@@ -39,6 +39,10 @@ jobs:
       CHAT_MODEL_ID: deepseek/deepseek-r1:free
       TOOL_SECRETS_ENCRYPTION_KEY: 3eafa276356c2bcb2f139410c731b4da88aeca1b487b9544fae4b712a5d5a477
       NODE_ENV: test
+      # Throwaway values, not secrets — every test mocks supabase-js's
+      # auth.getUser(), so this project is never actually contacted.
+      SUPABASE_URL: https://ci-test.supabase.co
+      SUPABASE_ANON_KEY: ci-test-anon-key
 
     steps:
       - uses: actions/checkout@v4

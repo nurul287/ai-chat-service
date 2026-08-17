@@ -20,9 +20,15 @@ import {
 } from "fastify-type-provider-zod";
 import { config } from "./config";
 import chatRoutes from "./chat/chat.routes";
+import tenantRoutes from "./dashboard/tenant.routes";
+import dashboardDocumentsRoutes from "./dashboard/documents.routes";
+import dashboardKeysRoutes from "./dashboard/keys.routes";
+import dashboardUsageRoutes from "./dashboard/usage.routes";
+import dashboardWidgetRoutes from "./dashboard/widget.routes";
 import documentsRoutes from "./documents/documents.routes";
 import { defaultLogger } from "./lib/logger";
 import authPlugin from "./plugins/auth";
+import dashboardAuthPlugin from "./plugins/dashboard-auth";
 import publishableAuthPlugin from "./plugins/publishable-auth";
 import { verifyPublishableApiKey } from "./tenants/tenants.service";
 import toolsRoutes from "./tools/tools.routes";
@@ -68,6 +74,18 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
   // assertion, which is the one that would catch this regressing).
   void app.register(fastifyCors, {
     delegator: async (request: FastifyRequest) => {
+      if (request.url === "/dashboard" || request.url.startsWith("/dashboard/")) {
+        const origin = request.headers.origin;
+        if (request.method === "OPTIONS") return { origin: origin ?? false };
+        // Unlike /widget, this allowlist is NOT per-tenant — the dashboard
+        // is one app with one deployed origin (plus localhost in dev), not
+        // a domain a tenant configures.
+        const allowed =
+          (config.DASHBOARD_URL && origin === config.DASHBOARD_URL) ||
+          (config.NODE_ENV !== "production" && origin === "http://localhost:5173");
+        return { origin: allowed ? origin : false };
+      }
+
       // A plain `startsWith("/widget")` would also match a future sibling
       // route like `/widget-preview` or `/widgets` — anything merely
       // starting with the same characters, not just this prefix. Requiring
@@ -206,6 +224,23 @@ export function buildApp(opts: { logger?: FastifyServerOptions["logger"] } = {})
       await widget.register(widgetRoutes);
     },
     { prefix: "/widget" },
+  );
+
+  // A third sibling of /v1 and /widget. dashboardAuthPlugin resolves the
+  // caller's Supabase user id; individual routes (via requireDashboardTenant,
+  // applied per-route rather than scope-wide) resolve the tenant — see that
+  // preHandler's own comment for why GET /tenant and POST /signup are the
+  // two exceptions.
+  void app.register(
+    async (dashboard) => {
+      await dashboard.register(dashboardAuthPlugin);
+      await dashboard.register(tenantRoutes);
+      await dashboard.register(dashboardDocumentsRoutes);
+      await dashboard.register(dashboardKeysRoutes);
+      await dashboard.register(dashboardUsageRoutes);
+      await dashboard.register(dashboardWidgetRoutes);
+    },
+    { prefix: "/dashboard" },
   );
 
   app.setNotFoundHandler(async (_request, reply) =>

@@ -1,5 +1,6 @@
 import { isStepCount, streamText } from "ai";
 import { config } from "../config";
+import { trackBackgroundWork } from "../lib/background-work";
 import type { RetrievedChunk } from "../retrieval/retrieve";
 import { recordChatMetrics } from "./chat-metrics.service";
 import {
@@ -126,16 +127,18 @@ export async function* runChat(input: RunChatInput): AsyncGenerator<ChatWireEven
 
   maybeRefreshIntentSummary(conversation.id, userTurnCount);
 
-  void recordMetricsInBackground({
-    conversationId: conversation.id,
-    messageId: assistantMessage.id,
-    tenantId: input.tenantId,
-    latencyMs: Date.now() - startedAt,
-    usage,
-    toolCallCount,
-    retrievedChunkCount,
-    finalStep: result.finalStep,
-  });
+  trackBackgroundWork(
+    recordMetricsInBackground({
+      conversationId: conversation.id,
+      messageId: assistantMessage.id,
+      tenantId: input.tenantId,
+      latencyMs: Date.now() - startedAt,
+      usage,
+      toolCallCount,
+      retrievedChunkCount,
+      finalStep: result.finalStep,
+    }),
+  );
 
   yield { event: "done", data: { conversationId: conversation.id, messageId: assistantMessage.id } };
 }

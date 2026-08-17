@@ -1,15 +1,39 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
 import { apiKeys, tenants, type Tenant } from "../db/schema";
 import { generateApiKey, hashApiKey } from "../auth/api-key";
 
-export async function createTenant(input: { name: string; slug: string }): Promise<Tenant> {
-  const [tenant] = await db.insert(tenants).values(input).returning();
+/**
+ * The query-builder surface shared by the module-level `db` singleton and
+ * a `tx` handle handed to a `db.transaction()` callback. Deliberately
+ * `Pick`ed down to just these four methods rather than `typeof db`: the
+ * full `db` type also carries `$client` (the underlying postgres.js
+ * connection) and `transaction` itself, neither of which a `tx` object
+ * has — a transaction cannot nest another transaction through this same
+ * client. A function typed against this narrower surface runs identically
+ * whether it's handed `db` directly or a `tx` from a caller's transaction.
+ */
+type DbClient = Pick<typeof db, "insert" | "select" | "update" | "delete">;
+
+export async function createTenant(
+  input: {
+    name: string;
+    slug: string;
+    ownerUserId?: string;
+  },
+  dbHandle: DbClient = db,
+): Promise<Tenant> {
+  const [tenant] = await dbHandle.insert(tenants).values(input).returning();
   return tenant!;
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | null> {
   const [tenant] = await db.select().from(tenants).where(eq(tenants.slug, slug));
+  return tenant ?? null;
+}
+
+export async function getTenantByOwnerUserId(ownerUserId: string): Promise<Tenant | null> {
+  const [tenant] = await db.select().from(tenants).where(eq(tenants.ownerUserId, ownerUserId));
   return tenant ?? null;
 }
 
@@ -29,10 +53,35 @@ export async function issueApiKey(
   tenantId: string,
   name: string,
   kind: "secret" | "publishable" = "secret",
-): Promise<{ plaintext: string; prefix: string }> {
+  dbHandle: DbClient = db,
+): Promise<{ id: string; plaintext: string; prefix: string }> {
   const { plaintext, prefix, hash } = generateApiKey(kind);
-  await db.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind });
-  return { plaintext, prefix };
+  const [inserted] = await dbHandle.insert(apiKeys).values({ tenantId, name, keyPrefix: prefix, keyHash: hash, kind }).returning({ id: apiKeys.id });
+  return { id: inserted!.id, plaintext, prefix };
+}
+
+export async function listApiKeys(tenantId: string): Promise<
+  Array<{
+    id: string;
+    name: string;
+    keyPrefix: string;
+    lastUsedAt: string | null;
+    revokedAt: string | null;
+    createdAt: string;
+  }>
+> {
+  return db
+    .select({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      keyPrefix: apiKeys.keyPrefix,
+      lastUsedAt: apiKeys.lastUsedAt,
+      revokedAt: apiKeys.revokedAt,
+      createdAt: apiKeys.createdAt,
+    })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.tenantId, tenantId), eq(apiKeys.kind, "secret")))
+    .orderBy(desc(apiKeys.createdAt));
 }
 
 export async function verifyApiKey(plaintext: string): Promise<Tenant | null> {
@@ -102,9 +151,17 @@ export async function flushApiKeyTouches(): Promise<void> {
   await Promise.all([...pendingTouches]);
 }
 
-export async function revokeApiKey(keyId: string): Promise<void> {
-  await db
+/**
+ * Tenant-scoped: the WHERE clause requires both tenantId and keyId to
+ * match, so a caller can never revoke another tenant's key by id alone —
+ * the dashboard route that calls this only ever knows its own
+ * request.tenant.id, never another tenant's.
+ */
+export async function revokeApiKey(tenantId: string, keyId: string): Promise<boolean> {
+  const revoked = await db
     .update(apiKeys)
     .set({ revokedAt: new Date().toISOString() })
-    .where(eq(apiKeys.id, keyId));
+    .where(and(eq(apiKeys.id, keyId), eq(apiKeys.tenantId, tenantId)))
+    .returning({ id: apiKeys.id });
+  return revoked.length > 0;
 }

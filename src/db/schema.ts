@@ -18,6 +18,7 @@ export const tenants = pgTable("tenants", {
   id: uuid().defaultRandom().primaryKey().notNull(),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  ownerUserId: uuid("owner_user_id").unique(),
   allowedOrigins: jsonb("allowed_origins").default([]).notNull().$type<string[]>(),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" }).defaultNow().notNull(),
